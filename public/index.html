@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Candles + Indicator (Node)</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 0;
+        }
+
+        .wrap {
+            padding: 16px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: end;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 180px;
+        }
+
+        label {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        select,
+        input,
+        button {
+            padding: 10px;
+            border: 1px solid #3333;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        #chart {
+            width: 100%;
+            height: 640px;
+            margin-top: 14px;
+        }
+
+        .msg {
+            margin-top: 10px;
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .small {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .card {
+            border: 1px solid #3333;
+            border-radius: 14px;
+            padding: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <h2 style="margin: 0 0 10px 0;">📈 Interactive Candlestick Chart with Indicator (Node.js)</h2>
+
+        <div class="card">
+            <div class="row">
+                <div class="field">
+                    <label>Timeframe</label>
+                    <select id="timeframe">
+                        <option value="1m">1m</option>
+                        <option value="5m">5m</option>
+                        <option value="15m">15m</option>
+                        <option value="30m" selected>30m</option>
+                        <option value="1h">1h</option>
+                        <option value="1d">1d</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>Indicator</label>
+                    <select id="indicator">
+                        <option value="VWAP" selected>VWAP</option>
+                        <option value="SMA">SMA</option>
+                        <option value="EMA">EMA</option>
+                        <option value="CLOSE">Close</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>MA / EMA Window</label>
+                    <input id="window" type="number" min="2" max="200" value="20" />
+                </div>
+
+                <div class="field">
+                    <label>Dummy candles (1m base)</label>
+                    <input id="n" type="number" min="200" max="5000" value="600" />
+                </div>
+
+                <div class="field">
+                    <button id="loadBtn">Load Chart</button>
+                </div>
+            </div>
+
+            <div class="msg small" id="status">Ready.</div>
+        </div>
+
+        <div id="chart"></div>
+    </div>
+
+    <script src="./app.js"></script>
+</body>
+
+</html>
