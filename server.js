@@ -1,204 +1,224 @@
 const express = require("express");
 const path = require("path");
+require("dotenv").config();
+
+const { SmartAPI } = require("smartapi-javascript"); // :contentReference[oaicite:5]{index=5}
+const { authenticator } = require("otplib");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, "public")));
+app.use(express.json());
 
-/**
- * Generate dummy 1-minute OHLCV data
- * Returns array of candles:
- * { time: ISO string, open, high, low, close, volume }
- */
-function generateDummyData(nMinutes = 600) {
-    const now = new Date();
-    now.setSeconds(0, 0);
-
-    // create timestamps ending at now
-    const candles = [];
-    let price = 100;
-
-    for (let i = nMinutes - 1; i >= 0; i--) {
-        const t = new Date(now.getTime() - i * 60 * 1000);
-
-        // random walk
-        const open = price;
-        const close = open + randn() * 0.2;
-        const high = Math.max(open, close) + Math.abs(randn() * 0.3);
-        const low = Math.min(open, close) - Math.abs(randn() * 0.3);
-        const volume = randInt(100, 1000);
-
-        candles.push({
-            time: t.toISOString(),
-            open,
-            high,
-            low,
-            close,
-            volume,
-        });
-
-        price = close; // next candle starts from previous close
-    }
-
-    return candles;
-}
-
-// normal-ish random using Box-Muller
+// ------------------ Dummy fallback ------------------
 function randn() {
     let u = 0, v = 0;
     while (u === 0) u = Math.random();
     while (v === 0) v = Math.random();
     return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 }
-
 function randInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
+function generateDummyData(nMinutes = 600) {
+    const now = new Date();
+    now.setSeconds(0, 0);
 
-function timeframeToMs(tf) {
-    const map = {
-        "1m": 60 * 1000,
-        "5m": 5 * 60 * 1000,
-        "15m": 15 * 60 * 1000,
-        "30m": 30 * 60 * 1000,
-        "1h": 60 * 60 * 1000,
-        "1d": 24 * 60 * 60 * 1000,
-    };
-    return map[tf] || map["30m"];
+    const candles = [];
+    let price = 100;
+
+    for (let i = nMinutes - 1; i >= 0; i--) {
+        const t = new Date(now.getTime() - i * 60 * 1000);
+        const open = price;
+        const close = open + randn() * 0.2;
+        const high = Math.max(open, close) + Math.abs(randn() * 0.3);
+        const low = Math.min(open, close) - Math.abs(randn() * 0.3);
+        const volume = randInt(100, 1000);
+        candles.push({ time: t.toISOString(), open, high, low, close, volume });
+        price = close;
+    }
+    return candles;
 }
 
-/**
- * Resample 1m candles into timeframe candles (OHLC + sum volume)
- */
-function resampleOHLC(candles, timeframe) {
-    const bucketMs = timeframeToMs(timeframe);
+// ------------------ Helpers ------------------
+function mapInterval(timeframe) {
+    // SmartAPI intervals commonly: ONE_MINUTE, FIVE_MINUTE, FIFTEEN_MINUTE, THIRTY_MINUTE, ONE_HOUR, ONE_DAY :contentReference[oaicite:6]{index=6}
+    const m = {
+        "1m": "ONE_MINUTE",
+        "5m": "FIVE_MINUTE",
+        "15m": "FIFTEEN_MINUTE",
+        "30m": "THIRTY_MINUTE",
+        "1h": "ONE_HOUR",
+        "1d": "ONE_DAY",
+    };
+    return m[timeframe] || "THIRTY_MINUTE";
+}
 
-    // group by bucket start time
-    const buckets = new Map();
+// optional: you can later cache instrument master instead of re-loading repeatedly
+async function resolveSymbolTokenFromMaster(exchange, tradingsymbol) {
+    // AngelOne scrip master JSON :contentReference[oaicite:7]{index=7}
+    const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to load scrip master: ${res.status}`);
+    const data = await res.json();
 
-    for (const c of candles) {
-        const t = new Date(c.time).getTime();
-        const bucketStart = Math.floor(t / bucketMs) * bucketMs;
+    const row = data.find(
+        (x) =>
+            String(x.exch_seg).toUpperCase() === String(exchange).toUpperCase() &&
+            String(x.symbol).toUpperCase() === String(tradingsymbol).toUpperCase()
+    );
 
-        if (!buckets.has(bucketStart)) buckets.set(bucketStart, []);
-        buckets.get(bucketStart).push(c);
+    if (!row) throw new Error(`Symbol not found in master: ${exchange}:${tradingsymbol}`);
+    return String(row.token);
+}
+
+// ------------------ Angel One session ------------------
+let smart = null;
+let sessionReady = false;
+let lastSessionAt = 0;
+
+async function ensureAngelSession() {
+    if (sessionReady && Date.now() - lastSessionAt < 10 * 60 * 1000) return;
+
+    const apiKey = process.env.ANGEL_API_KEY;
+    const clientCode = process.env.ANGEL_CLIENT_CODE;
+    const password = process.env.ANGEL_PASSWORD;
+    const totpSecret = process.env.ANGEL_TOTP_SECRET;
+
+    if (!apiKey || !clientCode || !password || !totpSecret) {
+        throw new Error("Missing Angel env vars. Set ANGEL_API_KEY, ANGEL_CLIENT_CODE, ANGEL_PASSWORD, ANGEL_TOTP_SECRET");
     }
 
-    const resampled = [];
-    const sortedKeys = Array.from(buckets.keys()).sort((a, b) => a - b);
+    smart = new SmartAPI({ api_key: apiKey }); // :contentReference[oaicite:8]{index=8}
 
-    for (const key of sortedKeys) {
-        const arr = buckets.get(key);
-        if (!arr || arr.length === 0) continue;
+    const totp = authenticator.generate(totpSecret);
+    // generateSession(clientCode, password, totp) :contentReference[oaicite:9]{index=9}
+    const data = await smart.generateSession(clientCode, password, totp);
 
-        const open = arr[0].open;
-        const close = arr[arr.length - 1].close;
-        let high = -Infinity;
-        let low = Infinity;
-        let volume = 0;
+    if (!data || data.status === false) {
+        throw new Error(`Angel generateSession failed: ${JSON.stringify(data)}`);
+    }
 
-        for (const c of arr) {
-            if (c.high > high) high = c.high;
-            if (c.low < low) low = c.low;
-            volume += c.volume;
+    sessionReady = true;
+    lastSessionAt = Date.now();
+}
+
+// ------------------ API: candles ------------------
+/**
+ * /api/candles?timeframe=5m&indicator=VWAP&window=20&exchange=NSE&tradingsymbol=RELIANCE-EQ
+ *
+ * Returns candles aligned for Plotly:
+ * { time, open, high, low, close, volume, indicator }
+ */
+app.get("/api/candles", async (req, res) => {
+    const timeframe = req.query.timeframe || "30m";
+    const indicator = (req.query.indicator || "VWAP").toUpperCase();
+    const window = Math.max(2, Math.min(200, parseInt(req.query.window || "20", 10)));
+
+    const exchange = (req.query.exchange || process.env.ANGEL_EXCHANGE || "NSE").toUpperCase();
+    const tradingsymbol = (req.query.tradingsymbol || process.env.ANGEL_TRADINGSYMBOL || "RELIANCE-EQ").toUpperCase();
+
+    try {
+        await ensureAngelSession();
+
+        const symboltoken = await resolveSymbolTokenFromMaster(exchange, tradingsymbol);
+
+        // build date range (last N candles * timeframe-ish)
+        const now = new Date();
+        const todate = fmtDateTime(now);
+        const from = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000); // last 2 days default
+        const fromdate = fmtDateTime(from);
+
+        const candleParams = {
+            exchange,
+            symboltoken,
+            interval: mapInterval(timeframe),
+            fromdate,
+            todate,
+        };
+
+        // SmartAPI candle data call :contentReference[oaicite:10]{index=10}
+        const candleResp = await smart.getCandleData(candleParams);
+
+        if (!candleResp || candleResp.status === false) {
+            throw new Error(`getCandleData failed: ${JSON.stringify(candleResp)}`);
         }
 
-        resampled.push({
-            time: new Date(key).toISOString(),
-            open,
-            high,
-            low,
-            close,
-            volume,
+        // Candle response format is usually: data: [[time, open, high, low, close, volume], ...]
+        const rows = candleResp.data || [];
+        const candles = rows.map((r) => ({
+            time: new Date(r[0]).toISOString(),
+            open: Number(r[1]),
+            high: Number(r[2]),
+            low: Number(r[3]),
+            close: Number(r[4]),
+            volume: Number(r[5] ?? 0),
+        }));
+
+        const withIndicator = addIndicator(candles, indicator, window);
+
+        res.json({
+            ok: true,
+            source: "angelone",
+            params: { exchange, tradingsymbol, timeframe, indicator, window },
+            candles: withIndicator,
+        });
+    } catch (e) {
+        // fallback to dummy so UI still works
+        const dummy = generateDummyData(600);
+        const withIndicator = addIndicator(dummy, indicator, window);
+
+        res.json({
+            ok: true,
+            source: "dummy_fallback",
+            error: String(e.message || e),
+            params: { timeframe, indicator, window },
+            candles: withIndicator,
         });
     }
+});
 
-    return resampled;
-}
-
-/**
- * Indicator calculation (adds `indicator` array aligned with candles)
- */
+// ------------------ Indicator (same as before) ------------------
 function addIndicator(candles, indicator, window = 20) {
-    const ind = String(indicator || "VWAP").toUpperCase();
-
     const closes = candles.map((c) => c.close);
     const volumes = candles.map((c) => c.volume);
+    let out = new Array(candles.length).fill(null);
 
-    let indicatorArr = new Array(candles.length).fill(null);
-
-    if (ind === "VWAP") {
-        let cumPV = 0;
-        let cumVol = 0;
+    if (indicator === "VWAP") {
+        let cumPV = 0, cumVol = 0;
         for (let i = 0; i < candles.length; i++) {
             cumPV += closes[i] * volumes[i];
             cumVol += volumes[i];
-            indicatorArr[i] = cumVol === 0 ? null : cumPV / cumVol;
+            out[i] = cumVol === 0 ? null : cumPV / cumVol;
         }
-    } else if (ind === "SMA") {
+    } else if (indicator === "SMA") {
         for (let i = 0; i < candles.length; i++) {
-            if (i + 1 < window) {
-                indicatorArr[i] = null;
-                continue;
-            }
+            if (i + 1 < window) continue;
             let sum = 0;
             for (let j = i - window + 1; j <= i; j++) sum += closes[j];
-            indicatorArr[i] = sum / window;
+            out[i] = sum / window;
         }
-    } else if (ind === "EMA") {
-        const span = window;
-        const alpha = 2 / (span + 1);
+    } else if (indicator === "EMA") {
+        const alpha = 2 / (window + 1);
         let ema = null;
-
         for (let i = 0; i < candles.length; i++) {
-            if (ema === null) {
-                ema = closes[i];
-            } else {
-                ema = alpha * closes[i] + (1 - alpha) * ema;
-            }
-            indicatorArr[i] = ema;
+            ema = ema === null ? closes[i] : alpha * closes[i] + (1 - alpha) * ema;
+            out[i] = ema;
         }
-    } else if (ind === "CLOSE") {
-        indicatorArr = closes.slice();
+    } else if (indicator === "CLOSE") {
+        out = closes.slice();
     } else {
         throw new Error(`Unsupported indicator: ${indicator}`);
     }
 
-    // attach indicator values
-    return candles.map((c, i) => ({ ...c, indicator: indicatorArr[i] }));
+    return candles.map((c, i) => ({ ...c, indicator: out[i] }));
 }
 
-/**
- * API:
- * /api/candles?timeframe=30m&indicator=VWAP&window=20&n=600
- */
-app.get("/api/candles", (req, res) => {
-    try {
-        const timeframe = req.query.timeframe || "30m";
-        const indicator = req.query.indicator || "VWAP";
-        const window = Math.max(2, Math.min(200, parseInt(req.query.window || "20", 10)));
-        const n = Math.max(200, Math.min(5000, parseInt(req.query.n || "600", 10)));
+// SmartAPI expects "YYYY-MM-DD HH:mm" in many examples :contentReference[oaicite:11]{index=11}
+function pad(n) { return String(n).padStart(2, "0"); }
+function fmtDateTime(d) {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
-        // 1m base data
-        const oneMin = generateDummyData(n);
-
-        // resample
-        const tfCandles = resampleOHLC(oneMin, timeframe);
-
-        // add indicator
-        const withInd = addIndicator(tfCandles, indicator, window);
-
-        res.json({
-            ok: true,
-            params: { timeframe, indicator, window, n },
-            candles: withInd,
-        });
-    } catch (e) {
-        res.status(400).json({ ok: false, error: String(e.message || e) });
-    }
-});
-
-app.listen(PORT, () => {
-    console.log(`✅ Server running: http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`✅ http://localhost:${PORT}`));
