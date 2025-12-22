@@ -83,18 +83,29 @@ async function ensureAngelSession() {
 
     const apiKey = process.env.ANGEL_API_KEY;
     const clientCode = process.env.ANGEL_CLIENT_CODE;
-    const password = process.env.ANGEL_PASSWORD;
+
+    // ✅ Use MPIN (4 digits) instead of password
+    const mpin = process.env.ANGEL_MPIN;
+
     const totpSecret = process.env.ANGEL_TOTP_SECRET;
 
-    if (!apiKey || !clientCode || !password || !totpSecret) {
-        throw new Error("Missing Angel env vars. Set ANGEL_API_KEY, ANGEL_CLIENT_CODE, ANGEL_PASSWORD, ANGEL_TOTP_SECRET");
+    if (!apiKey || !clientCode || !mpin || !totpSecret) {
+        throw new Error(
+            "Missing Angel env vars. Set ANGEL_API_KEY, ANGEL_CLIENT_CODE, ANGEL_MPIN, ANGEL_TOTP_SECRET"
+        );
     }
 
-    smart = new SmartAPI({ api_key: apiKey }); // :contentReference[oaicite:8]{index=8}
+    // Safety: MPIN must be exactly 4 digits
+    if (!/^\d{4}$/.test(mpin)) {
+        throw new Error("ANGEL_MPIN must be exactly 4 digits.");
+    }
+
+    smart = new SmartAPI({ api_key: apiKey });
 
     const totp = authenticator.generate(totpSecret);
-    // generateSession(clientCode, password, totp) :contentReference[oaicite:9]{index=9}
-    const data = await smart.generateSession(clientCode, password, totp);
+
+    // ✅ Pass MPIN in place of password
+    const data = await smart.generateSession(clientCode, mpin, totp);
 
     if (!data || data.status === false) {
         throw new Error(`Angel generateSession failed: ${JSON.stringify(data)}`);
@@ -103,6 +114,7 @@ async function ensureAngelSession() {
     sessionReady = true;
     lastSessionAt = Date.now();
 }
+
 
 // ------------------ API: candles ------------------
 /**
