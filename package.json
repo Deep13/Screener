@@ -9,9 +9,12 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "axios": "^1.13.2",
+    "body-parser": "^2.2.2",
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
     "otplib": "^12.0.1",
+    "plotly.js": "^3.3.1",
     "smartapi-javascript": "^1.0.27"
   }
 }

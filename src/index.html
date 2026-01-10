@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stock Screener</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  </head>
+  <body>
+    <h1>Stock Screener</h1>
+    <form id="stockForm">
+      <label for="timeframe">Timeframe:</label>
+      <select id="timeframe" name="timeframe">
+        <option value="1h">1 Hour</option>
+        <option value="1d">1 Day</option>
+        <option value="1w">1 Week</option></select
+      ><br /><br />
+
+      <label for="indicator">Indicator:</label>
+      <select id="indicator" name="indicator">
+        <option value="MA">MA (Moving Average)</option>
+        <option value="EMA">EMA (Exponential Moving Average)</option>
+        <option value="ST">ST (SuperTrend)</option>
+        <option value="AVWAP">AVWAP (Anchored VWAP)</option></select
+      ><br /><br />
+
+      <label for="stocks">Select Stocks:</label>
+      <select id="stocks" name="stocks" multiple>
+        <option value="AAPL">AAPL</option>
+        <option value="GOOG">GOOG</option>
+        <option value="AMZN">AMZN</option>
+        <option value="MSFT">MSFT</option></select
+      ><br /><br />
+
+      <button type="submit">Get Stock Data</button>
+    </form>
+
+    <h2>Stock Chart</h2>
+    <div id="chart"></div>
+
+    <h2>Stocks Meeting Criteria</h2>
+    <table id="stockTable">
+      <thead>
+        <tr>
+          <th>Stock</th>
+          <th>Price</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <script>
+      document.getElementById("stockForm").addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        const timeframe = document.getElementById("timeframe").value;
+        const indicator = document.getElementById("indicator").value;
+        const stocks = Array.from(document.getElementById("stocks").selectedOptions).map((option) => option.value);
+
+        // Fetch data from the backend
+        const response = await fetch("/getStockData", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ timeframe, indicator, stocks }),
+        });
+
+        const data = await response.json();
+        console.log("Received Data:", data); // Log the data received from the backend
+
+        // Update the stock chart (use Plotly)
+        const stockData = data.map((stock) => ({
+          x: stock.timestamps,
+          close: stock.closePrices,
+          high: stock.highPrices,
+          low: stock.lowPrices,
+          open: stock.openPrices,
+          type: "candlestick",
+          name: stock.symbol,
+        }));
+
+        const layout = {
+          title: "Stock Candlestick Chart",
+          xaxis: { title: "Time" },
+          yaxis: { title: "Price" },
+        };
+
+        Plotly.newPlot("chart", stockData, layout);
+
+        // Update the table with stocks meeting criteria
+        const tableBody = document.getElementById("stockTable").getElementsByTagName("tbody")[0];
+        tableBody.innerHTML = ""; // Clear the table
+
+        data.forEach((stock) => {
+          if (stock.meetsCriteria) {
+            const row = tableBody.insertRow();
+            const cell1 = row.insertCell(0);
+            const cell2 = row.insertCell(1);
+            cell1.textContent = stock.symbol;
+            cell2.textContent = stock.currentPrice;
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

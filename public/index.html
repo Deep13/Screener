@@ -1,130 +1,319 @@
-<!doctype html>
-<html lang="en">
-
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Interactive Candles + Indicator (Node)</title>
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Angel Screener</title>
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
     <style>
-        body {
-            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-            margin: 0;
-        }
+      body {
+        font-family: system-ui, Arial;
+        margin: 20px;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: end;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        opacity: 0.8;
+        margin-bottom: 6px;
+      }
+      select,
+      input,
+      button {
+        padding: 10px;
+        font-size: 14px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 16px;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 10px;
+        text-align: left;
+        font-size: 14px;
+      }
+      th {
+        background: #f6f6f6;
+      }
+      .muted {
+        opacity: 0.7;
+      }
+      .ok {
+        color: #0a7;
+        font-weight: 600;
+      }
+      .tabs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
 
-        .wrap {
-            padding: 16px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
+      .tab-btn {
+        border: 1px solid #ddd;
+        background: #fff;
+        padding: 8px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 13px;
+      }
 
-        .row {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            align-items: end;
-        }
+      .tab-btn.active {
+        border-color: #111;
+        font-weight: 600;
+      }
 
-        .field {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            min-width: 180px;
-        }
+      .tab-panel {
+        display: none;
+        border: 1px solid #eee;
+        border-radius: 12px;
+        padding: 10px;
+      }
 
-        label {
-            font-size: 12px;
-            opacity: 0.8;
-        }
+      .tab-panel.active {
+        display: block;
+      }
 
-        select,
-        input,
-        button {
-            padding: 10px;
-            border: 1px solid #3333;
-            border-radius: 10px;
-            font-size: 14px;
-        }
-
-        button {
-            cursor: pointer;
-        }
-
-        #chart {
-            width: 100%;
-            height: 640px;
-            margin-top: 14px;
-        }
-
-        .msg {
-            margin-top: 10px;
-            font-size: 13px;
-            opacity: 0.9;
-        }
-
-        .small {
-            font-size: 12px;
-            opacity: 0.7;
-        }
-
-        .card {
-            border: 1px solid #3333;
-            border-radius: 14px;
-            padding: 14px;
-        }
+      .chart-box {
+        width: 100%;
+        height: 420px;
+      }
     </style>
-</head>
+  </head>
+  <body>
+    <h2>3-Candle Screener</h2>
 
-<body>
-    <div class="wrap">
-        <h2 style="margin: 0 0 10px 0;">📈 Interactive Candlestick Chart with Indicator (Node.js)</h2>
+    <div class="row">
+      <div>
+        <label>Preset</label>
+        <select id="preset">
+          <option value="today">today</option>
+          <option value="1h">1h</option>
+          <option value="2h">2h</option>
+          <option value="4h">4h</option>
+          <option value="2d">2d</option>
+        </select>
+      </div>
 
-        <div class="card">
-            <div class="row">
-                <div class="field">
-                    <label>Timeframe</label>
-                    <select id="timeframe">
-                        <option value="1m">1m</option>
-                        <option value="5m">5m</option>
-                        <option value="15m">15m</option>
-                        <option value="30m" selected>30m</option>
-                        <option value="1h">1h</option>
-                        <option value="1d">1d</option>
-                    </select>
-                </div>
+      <div>
+        <label>Timeframe</label>
+        <select id="timeframe">
+          <option value="1m">1m</option>
+          <option value="5m" selected>5m</option>
+          <option value="15m">15m</option>
+          <option value="30m">30m</option>
+          <option value="1h">1h</option>
+          <option value="1d">1d</option>
+        </select>
+      </div>
 
-                <div class="field">
-                    <label>Indicator</label>
-                    <select id="indicator">
-                        <option value="VWAP" selected>VWAP</option>
-                        <option value="SMA">SMA</option>
-                        <option value="EMA">EMA</option>
-                        <option value="CLOSE">Close</option>
-                    </select>
-                </div>
+      <div>
+        <label>Indicator</label>
+        <select id="indicator">
+          <option value="VWAP" selected>VWAP</option>
+          <option value="SMA">SMA</option>
+          <option value="EMA">EMA</option>
+          <option value="CLOSE">CLOSE</option>
+        </select>
+      </div>
 
-                <div class="field">
-                    <label>MA / EMA Window</label>
-                    <input id="window" type="number" min="2" max="200" value="20" />
-                </div>
+      <div>
+        <label>Window</label>
+        <input id="window" type="number" min="2" max="200" value="20" />
+      </div>
 
-                <div class="field">
-                    <label>Dummy candles (1m base)</label>
-                    <input id="n" type="number" min="200" max="5000" value="600" />
-                </div>
+      <div>
+        <label>Candle-1 side</label>
+        <select id="candle1Side">
+          <option value="BELOW" selected>BELOW</option>
+          <option value="ABOVE">ABOVE</option>
+        </select>
+      </div>
 
-                <div class="field">
-                    <button id="loadBtn">Load Chart</button>
-                </div>
-            </div>
+      <div>
+        <label>Breakout mode</label>
+        <select id="breakoutMode">
+          <option value="CLOSE" selected>CLOSE &gt; Candle2High</option>
+          <option value="HIGH">HIGH &gt; Candle2High</option>
+        </select>
+      </div>
 
-            <div class="msg small" id="status">Ready.</div>
-        </div>
-
-        <div id="chart"></div>
+      <button id="run">Run Screener</button>
+    </div>
+    <!-- Add Plotly Candlestick Chart container -->
+    <div id="charts" style="margin-top: 20px">
+      <div id="tabs" class="tabs"></div>
+      <div id="tab-panels"></div>
     </div>
 
-    <script src="./app.js"></script>
-</body>
+    <div id="status" class="muted" style="margin-top: 12px"></div>
 
+    <table id="table" style="display: none">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Exchange</th>
+          <th>Candle-2 High</th>
+          <th>Candle-3 Time</th>
+          <th>LTP</th>
+          <th>Live Break?</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      $("run").addEventListener("click", async () => {
+        $("status").textContent = "Running...";
+        $("table").style.display = "none";
+        const tbody = document.querySelector("#table tbody");
+        tbody.innerHTML = "";
+
+        // Clear the previous chart
+        $("tabs").innerHTML = "";
+        $("tab-panels").innerHTML = "";
+
+        const payload = {
+          preset: $("preset").value,
+          timeframe: $("timeframe").value,
+          indicator: $("indicator").value,
+          window: Number($("window").value),
+          candle1Side: $("candle1Side").value,
+          breakoutMode: $("breakoutMode").value,
+          confirmWithLTP: true,
+          // stocks: [...] // optional custom list
+        };
+
+        try {
+          const resp = await fetch("/api/screener", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const json = await resp.json();
+
+          if (!json.ok) throw new Error(json.error || "Failed");
+
+          const rows = json.results || [];
+          $("status").textContent = `Matches: ${rows.length}`;
+
+          if (!rows.length) return;
+
+          // Iterate and render each stock's data in the table
+          for (const r of rows) {
+            const tr = document.createElement("tr");
+            const c2h = r.hit?.candle2High;
+            const c3t = r.hit?.candle3?.time || r.hit?.candle3?.time || (r.hit?.candle3?.time ?? "");
+            const ltp = r.ltp ?? "";
+            const live = r.liveBreakAboveCandle2High;
+
+            tr.innerHTML = `
+          <td><strong>${r.tradingsymbol}</strong></td>
+          <td>${r.exchange}</td>
+          <td>${Number.isFinite(c2h) ? c2h.toFixed(2) : ""}</td>
+          <td>${r.hit?.candle3?.time ? new Date(r.hit.candle3.time).toLocaleString() : ""}</td>
+          <td>${typeof ltp === "number" ? ltp.toFixed(2) : ""}</td>
+          <td class="${live ? "ok" : ""}">${live === true ? "YES" : live === false ? "NO" : ""}</td>
+        `;
+            tbody.appendChild(tr);
+
+            // Generate Plotly chart for each matched stock
+            // ----- TAB + CHART FOR EACH MATCH -----
+            const candles = r.candles;
+            if (candles && candles.length) {
+              const dates = candles.map((c) => c.time);
+              const opens = candles.map((c) => c.open);
+              const highs = candles.map((c) => c.high);
+              const lows = candles.map((c) => c.low);
+              const closes = candles.map((c) => c.close);
+              const indicatorValues = candles.map((c) => c.indicator);
+
+              // Create tab button
+              const tabBtn = document.createElement("button");
+              tabBtn.className = "tab-btn";
+              tabBtn.textContent = r.tradingsymbol;
+
+              // Create panel
+              const panel = document.createElement("div");
+              panel.className = "tab-panel";
+
+              // Chart div inside panel
+              const chartDiv = document.createElement("div");
+              chartDiv.className = "chart-box";
+
+              const chartId = `chart-${r.exchange}-${r.tradingsymbol}`.replace(/[^a-zA-Z0-9-_]/g, "");
+              chartDiv.id = chartId;
+
+              panel.appendChild(chartDiv);
+
+              // Append to DOM
+              $("tabs").appendChild(tabBtn);
+              $("tab-panels").appendChild(panel);
+
+              // Tab behavior
+              tabBtn.addEventListener("click", () => {
+                // deactivate all
+                document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+                document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+
+                // activate selected
+                tabBtn.classList.add("active");
+                panel.classList.add("active");
+
+                // Resize plot properly when switching tabs
+                Plotly.Plots.resize(chartId);
+              });
+
+              // Plotly data (candles + indicator line)
+              const data = [
+                {
+                  x: dates,
+                  open: opens,
+                  high: highs,
+                  low: lows,
+                  close: closes,
+                  type: "candlestick",
+                  name: r.tradingsymbol,
+                },
+                {
+                  x: dates,
+                  y: indicatorValues,
+                  type: "scatter",
+                  mode: "lines",
+                  name: `${$("indicator").value} (${$("window").value})`,
+                  line: { width: 2, color: "#ff9800" },
+                },
+              ];
+
+              const layout = {
+                title: `${r.tradingsymbol} – Candles + ${$("indicator").value}`,
+                xaxis: { rangeslider: { visible: false } },
+                yaxis: { title: "Price (INR)" },
+                legend: { orientation: "h", y: 1.1 },
+                margin: { t: 50, r: 20, b: 40, l: 60 },
+              };
+
+              Plotly.newPlot(chartId, data, layout);
+            }
+          }
+          const firstTab = document.querySelector(".tab-btn");
+          if (firstTab) firstTab.click();
+          $("table").style.display = "table";
+        } catch (e) {
+          $("status").textContent = "Error: " + (e.message || e);
+        }
+      });
+    </script>
+  </body>
 </html>
