@@ -22,7 +22,7 @@
 const express = require("express");
 const path = require("path");
 require("dotenv").config();
-
+const fs = require("fs/promises");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
 
@@ -39,7 +39,8 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
-
+const RESULTS_FILE = path.join(__dirname, "results_history_new.json");
+const MAX_HISTORY = 200;
 // ------------------------------------------------------------
 // Default watchlist (10 stocks). Adjust anytime.
 const DEFAULT_STOCKS = [
@@ -93,7 +94,27 @@ const DEFAULT_STOCKS = [
   { exchange: "NSE", tradingsymbol: "UPL-EQ" },
   { exchange: "NSE", tradingsymbol: "WIPRO-EQ" },
 ];
+async function writeHistory(list) {
+  await fs.writeFile(RESULTS_FILE, JSON.stringify(list, null, 2), "utf-8");
+}
 
+async function readHistory() {
+  try {
+    const raw = await fs.readFile(RESULTS_FILE, "utf-8");
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    return [];
+  }
+}
+async function appendHistory(entry) {
+  const list = await readHistory();
+  list.push(entry);
+  // keep last N
+  const trimmed = list.slice(Math.max(0, list.length - MAX_HISTORY));
+  await writeHistory(trimmed);
+  return trimmed;
+}
 // ------------------------------------------------------------
 // Dummy fallback (so UI still works if session fails)
 function randn() {
@@ -183,16 +204,23 @@ let scripMasterCache = null;
 let scripMasterFetchedAt = 0;
 
 async function loadScripMasterCached() {
-  const ONE_DAY = 24 * 60 * 60 * 1000;
-  if (scripMasterCache && Date.now() - scripMasterFetchedAt < ONE_DAY) return scripMasterCache;
-
-  const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to load scrip master: ${res.status}`);
-  const data = await res.json();
-  scripMasterCache = data;
-  scripMasterFetchedAt = Date.now();
-  return data;
+  try {
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    if (scripMasterCache && Date.now() - scripMasterFetchedAt < ONE_DAY) return scripMasterCache;
+    console.log("📥 Fetching scrip master from Angel One…");
+    const url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+    const res = await fetch(url);
+    console.log(`Scrip master response: ${res.status} ${res.statusText}`);
+    if (!res.ok) throw new Error(`Failed to load scrip master: ${res.status}`);
+    const data = await res.json();
+    console.log(`Scrip master loaded: ${data.length} entries`);
+    scripMasterCache = data;
+    scripMasterFetchedAt = Date.now();
+    return data;
+  } catch (e) {
+    console.error("Failed to load scrip master:", e);
+    throw new Error("Unable to load scrip master. Please try again later.");
+  }
 }
 
 async function resolveSymbolTokenFromMaster(exchange, tradingsymbol) {
@@ -200,9 +228,9 @@ async function resolveSymbolTokenFromMaster(exchange, tradingsymbol) {
   const ts = String(tradingsymbol).toUpperCase();
 
   const data = await loadScripMasterCached();
-
+  console.log(`Resolving token for ${ex}:${ts} from scrip master with ${data.length} entries`);
   const row = data.find((x) => String(x.exch_seg).toUpperCase() === ex && String(x.symbol).toUpperCase() === ts);
-
+  console.log(`Scrip master lookup: ${ex}:${ts} →`, row ? `token ${row.token}` : "NOT FOUND");
   if (!row) throw new Error(`Symbol not found in master: ${ex}:${ts}`);
   return String(row.token);
 }
@@ -218,7 +246,7 @@ let angelFeedToken = null;
 
 async function ensureAngelSession() {
   if (sessionReady && Date.now() - lastSessionAt < 10 * 60 * 1000) return;
-
+  console.log("🔐 Establishing Angel One session…");
   const apiKey = process.env.ANGEL_API_KEY;
   const clientCode = process.env.ANGEL_CLIENT_CODE;
   const mpin = process.env.ANGEL_MPIN;
@@ -234,7 +262,7 @@ async function ensureAngelSession() {
 
   // MPIN in place of password
   const data = await smart.generateSession(clientCode, mpin, totp);
-
+  console.log("Session response:", data);
   if (!data || data.status === false) throw new Error(`Angel generateSession failed: ${JSON.stringify(data)}`);
 
   // SDK response usually puts tokens in data.data
@@ -280,9 +308,9 @@ async function getLTPBulk(exchangeTokens) {
 // Candle fetch
 async function fetchCandles(exchange, tradingsymbol, interval, preset) {
   await ensureAngelSession();
-
+  console.log(`Fetching candles for ${exchange}:${tradingsymbol} | Interval: ${interval} | Preset: ${preset}`);
   const symboltoken = await resolveSymbolTokenFromMaster(exchange, tradingsymbol);
-
+  console.log(`Resolved ${exchange}:${tradingsymbol} → token ${symboltoken}`);
   const { from, to } = getRangeFromPreset(preset);
 
   const candleParams = {
@@ -292,7 +320,7 @@ async function fetchCandles(exchange, tradingsymbol, interval, preset) {
     fromdate: fmtDateTime(from),
     todate: fmtDateTime(to),
   };
-
+  console.log("Candle params:", candleParams);
   const candleResp = await smart.getCandleData(candleParams);
   if (!candleResp || candleResp.status === false) {
     throw new Error(`getCandleData failed: ${JSON.stringify(candleResp)}`);
@@ -467,6 +495,8 @@ app.get("/api/candles", async (req, res) => {
 // API: screener (bulk scan up to 10)
 // API: screener (with Plotly chart integration)
 app.post("/api/screener", async (req, res) => {
+  console.log("🟢 [/api/screener] Request started");
+
   const body = req.body || {};
 
   const preset = String(body.preset || "today");
@@ -482,29 +512,113 @@ app.post("/api/screener", async (req, res) => {
 
   const interval = mapInterval(timeframe);
 
+  console.log("⚙️ Params:", {
+    preset,
+    timeframe,
+    interval,
+    indicator,
+    window,
+    candle1Side,
+    breakoutMode,
+    confirmWithLTP,
+    stocks: stocks.length,
+  });
+
+  function parseAngelError(e) {
+    const msg = String(e?.message || e || "");
+    // Try to pull JSON from "... failed: { ... }"
+    const idx = msg.indexOf("{");
+    if (idx >= 0) {
+      try {
+        const obj = JSON.parse(msg.slice(idx));
+        return {
+          code: obj?.errorcode,
+          apiMessage: obj?.message,
+          raw: obj,
+          msg,
+        };
+      } catch (_) {}
+    }
+    // Fallback: if it’s an axios-like error
+    const resp = e?.response?.data;
+    return {
+      code: resp?.errorcode,
+      apiMessage: resp?.message,
+      raw: resp,
+      msg,
+    };
+  }
+
+  // ---------- helper: retry wrapper ----------
+  const fetchCandlesWithRetry = async (exchange, tradingsymbol, interval, preset, maxTry = 3) => {
+    let lastError;
+    for (let i = 1; i <= maxTry; i++) {
+      try {
+        return await fetchCandles(exchange, tradingsymbol, interval, preset);
+      } catch (e) {
+        lastError = e;
+        const info = parseAngelError(e);
+
+        console.warn(`⚠️ Candle fetch failed [${i}/${maxTry}]`, {
+          symbol: tradingsymbol,
+          exchange,
+          code: info.code,
+          message: info.apiMessage || info.msg,
+        });
+
+        // Retry if AB1004 (even when thrown as string)
+        if (info.code !== "AB1004") break;
+
+        const wait = 600 * Math.pow(2, i - 1);
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
+    throw lastError;
+  };
+
   try {
     const results = [];
     const ltpReq = { NSE: [], BSE: [], NFO: [], MCX: [] };
 
-    // sequential calls to avoid rate-limit issues (safe)
+    console.log("🔁 Processing stocks…");
+
     for (const s of stocks.slice(0, 10)) {
       const exchange = String(s.exchange || "NSE").toUpperCase();
       const tradingsymbol = String(s.tradingsymbol || "").toUpperCase();
+
       if (!tradingsymbol) continue;
 
+      console.log(`📊 ${exchange}:${tradingsymbol} → fetching candles`);
+
       try {
-        const { candles, symboltoken } = await fetchCandles(exchange, tradingsymbol, interval, preset);
+        const { candles, symboltoken } = await fetchCandlesWithRetry(exchange, tradingsymbol, interval, preset);
+
+        console.log(`🕯️ ${tradingsymbol} candles: ${candles?.length ?? 0}`);
 
         if (!candles || candles.length < 10) {
-          results.push({ exchange, tradingsymbol, symboltoken, match: false, reason: "Not enough candles" });
+          results.push({
+            exchange,
+            tradingsymbol,
+            symboltoken,
+            match: false,
+            reason: "Not enough candles",
+          });
           continue;
         }
 
         const withInd = addIndicator(candles, indicator, window);
-        const hits = scanThreeCandlePattern(withInd, { candle1Side, breakoutMode });
+        const hits = scanThreeCandlePattern(withInd, {
+          candle1Side,
+          breakoutMode,
+        });
 
         if (hits.length) {
-          if (confirmWithLTP && ltpReq[exchange]) ltpReq[exchange].push(String(symboltoken));
+          console.log(`✅ Pattern HIT → ${tradingsymbol}`);
+
+          if (confirmWithLTP && ltpReq[exchange]) {
+            ltpReq[exchange].push(String(symboltoken));
+          }
+
           results.push({
             exchange,
             tradingsymbol,
@@ -512,53 +626,117 @@ app.post("/api/screener", async (req, res) => {
             match: true,
             hit: hits[0],
             lastCandle: withInd[withInd.length - 1],
-            candles: withInd, // Include candles in response
+            candles: withInd,
           });
         } else {
-          results.push({ exchange, tradingsymbol, symboltoken, match: false });
+          console.log(`➖ No pattern → ${tradingsymbol}`);
+          results.push({
+            exchange,
+            tradingsymbol,
+            symboltoken,
+            match: false,
+          });
         }
       } catch (e) {
-        results.push({ exchange, tradingsymbol, match: false, error: String(e.message || e) });
+        const resp = e?.response?.data;
+        const info = parseAngelError(e);
+
+        console.error(`🔥 ${tradingsymbol} failed`, {
+          exchange,
+          code: info.code,
+          message: info.apiMessage || info.msg,
+        });
+
+        results.push({
+          exchange,
+          tradingsymbol,
+          match: false,
+          error: info.code ? `${info.code}: ${info.apiMessage || info.msg}` : info.msg,
+        });
       }
+
+      // light throttle (prevents AB1004 bursts)
+      await new Promise((r) => setTimeout(r, 250));
     }
 
-    // LTP confirmation (bulk)
+    // ---------- LTP BULK ----------
     let ltpMap = {};
     if (confirmWithLTP) {
-      const exchangeTokens = Object.fromEntries(Object.entries(ltpReq).filter(([_, arr]) => Array.isArray(arr) && arr.length > 0));
+      const exchangeTokens = Object.fromEntries(Object.entries(ltpReq).filter(([, arr]) => arr.length));
+
+      console.log("📡 LTP request:", exchangeTokens);
 
       if (Object.keys(exchangeTokens).length) {
         const fetched = await getLTPBulk(exchangeTokens);
+
         for (const row of fetched) {
           ltpMap[`${row.exchange}:${row.symbolToken}`] = Number(row.ltp);
         }
       }
     }
 
-    // Attach LTP & liveBreak flag
+    // ---------- Attach LTP ----------
     for (const r of results) {
       if (!r.match || !confirmWithLTP) continue;
+
       const key = `${r.exchange}:${r.symboltoken}`;
       const ltp = ltpMap[key];
-      if (Number.isFinite(ltp)) {
-        r.ltp = ltp;
-        const candle2High = r.hit?.candle2High;
-        r.liveBreakAboveCandle2High = Number.isFinite(candle2High) ? ltp > candle2High : null;
-      } else {
-        r.ltp = null;
-        r.liveBreakAboveCandle2High = null;
-      }
+
+      r.ltp = Number.isFinite(ltp) ? ltp : null;
+
+      const candle2High = r.hit?.candle2High;
+      r.liveBreakAboveCandle2High = Number.isFinite(candle2High) && Number.isFinite(ltp) ? ltp > candle2High : null;
+
+      console.log(`📈 ${r.tradingsymbol} LTP: ${r.ltp} | Break: ${r.liveBreakAboveCandle2High}`);
     }
 
-    // Only matched for home table
-    const matched = results.filter((x) => x.match);
+    // ---------- Save history ----------
+    const matched = results.filter((r) => r.match);
+
+    console.log(`💾 Saving run | Matches: ${matched.length}`);
+
+    await appendHistory({
+      id: `${Date.now()}`,
+      ts: new Date().toISOString(),
+      params: {
+        preset,
+        timeframe,
+        interval,
+        indicator,
+        window,
+        candle1Side,
+        breakoutMode,
+        confirmWithLTP,
+      },
+      results: matched.map((r) => ({
+        exchange: r.exchange,
+        tradingsymbol: r.tradingsymbol,
+        symboltoken: r.symboltoken,
+        ltp: r.ltp ?? null,
+        liveBreakAboveCandle2High: r.liveBreakAboveCandle2High ?? null,
+        hit: r.hit ?? null,
+        candles: r.candles?.slice(-300) ?? [],
+      })),
+    });
+
+    console.log("✅ [/api/screener] Completed");
 
     res.json({
       ok: true,
-      params: { preset, timeframe, interval, indicator, window, candle1Side, breakoutMode, confirmWithLTP },
+      params: {
+        preset,
+        timeframe,
+        interval,
+        indicator,
+        window,
+        candle1Side,
+        breakoutMode,
+        confirmWithLTP,
+      },
       results: matched,
     });
   } catch (e) {
+    console.error("🔥 [/api/screener] Fatal:", e);
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 });
@@ -567,6 +745,20 @@ app.post("/api/screener", async (req, res) => {
 // Health check
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
+});
+
+app.get("/api/history", async (req, res) => {
+  const list = await readHistory();
+  // latest first
+  res.json({ ok: true, history: list.slice().reverse() });
+});
+
+// API: history item by id
+app.get("/api/history/:id", async (req, res) => {
+  const list = await readHistory();
+  const item = list.find((x) => String(x.id) === String(req.params.id));
+  if (!item) return res.status(404).json({ ok: false, error: "Not found" });
+  res.json({ ok: true, item });
 });
 
 app.listen(PORT, () => console.log(`✅ http://localhost:${PORT}`));

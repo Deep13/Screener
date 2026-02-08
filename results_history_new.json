@@ -1,0 +1,294 @@
+[
+  {
+    "id": "1770569851341",
+    "ts": "2026-02-08T16:57:31.341Z",
+    "params": {
+      "preset": "today",
+      "timeframe": "5m",
+      "interval": "FIVE_MINUTE",
+      "indicator": "SMA",
+      "window": 20,
+      "candle1Side": "BELOW",
+      "breakoutMode": "CLOSE",
+      "confirmWithLTP": true
+    },
+    "results": [
+      {
+        "exchange": "NSE",
+        "tradingsymbol": "RELIANCE",
+        "ltp": 2468.25,
+        "liveBreakAboveCandle2High": true,
+        "hit": {
+          "candle2High": 2450,
+          "candle3": {
+            "time": "2026-02-08T16:50:00.000Z",
+            "close": 2462.4
+          }
+        },
+        "candles": [
+          {
+            "time": "2026-02-08T16:15:00Z",
+            "open": 2440,
+            "high": 2446,
+            "low": 2436,
+            "close": 2442,
+            "indicator": 2448
+          },
+          {
+            "time": "2026-02-08T16:20:00Z",
+            "open": 2442,
+            "high": 2450,
+            "low": 2439,
+            "close": 2446,
+            "indicator": 2447
+          },
+          {
+            "time": "2026-02-08T16:25:00Z",
+            "open": 2446,
+            "high": 2448,
+            "low": 2438,
+            "close": 2440,
+            "indicator": 2446
+          },
+          {
+            "time": "2026-02-08T16:30:00Z",
+            "open": 2440,
+            "high": 2445,
+            "low": 2435,
+            "close": 2438,
+            "indicator": 2445
+          },
+          {
+            "time": "2026-02-08T16:35:00Z",
+            "open": 2438,
+            "high": 2442,
+            "low": 2432,
+            "close": 2436,
+            "indicator": 2444
+          },
+          {
+            "time": "2026-02-08T16:40:00Z",
+            "open": 2436,
+            "high": 2441,
+            "low": 2434,
+            "close": 2439,
+            "indicator": 2443
+          },
+          {
+            "time": "2026-02-08T16:45:00Z",
+            "open": 2439,
+            "high": 2450,
+            "low": 2438,
+            "close": 2448,
+            "indicator": 2442
+          },
+          {
+            "time": "2026-02-08T16:50:00Z",
+            "open": 2448,
+            "high": 2465,
+            "low": 2446,
+            "close": 2462,
+            "indicator": 2441
+          }
+        ]
+      },
+      {
+        "exchange": "NSE",
+        "tradingsymbol": "TCS",
+        "ltp": 3745.8,
+        "liveBreakAboveCandle2High": true,
+        "hit": {
+          "candle2High": 3720,
+          "candle3": {
+            "time": "2026-02-08T16:55:00.000Z",
+            "close": 3740.2
+          }
+        },
+        "candles": [
+          {
+            "time": "2026-02-08T16:20:00Z",
+            "open": 3705,
+            "high": 3710,
+            "low": 3698,
+            "close": 3702,
+            "indicator": 3715
+          },
+          {
+            "time": "2026-02-08T16:25:00Z",
+            "open": 3702,
+            "high": 3720,
+            "low": 3700,
+            "close": 3712,
+            "indicator": 3714
+          },
+          {
+            "time": "2026-02-08T16:30:00Z",
+            "open": 3712,
+            "high": 3715,
+            "low": 3704,
+            "close": 3708,
+            "indicator": 3713
+          },
+          {
+            "time": "2026-02-08T16:35:00Z",
+            "open": 3708,
+            "high": 3712,
+            "low": 3702,
+            "close": 3705,
+            "indicator": 3712
+          },
+          {
+            "time": "2026-02-08T16:40:00Z",
+            "open": 3705,
+            "high": 3710,
+            "low": 3701,
+            "close": 3704,
+            "indicator": 3711
+          },
+          {
+            "time": "2026-02-08T16:45:00Z",
+            "open": 3704,
+            "high": 3720,
+            "low": 3703,
+            "close": 3716,
+            "indicator": 3710
+          },
+          {
+            "time": "2026-02-08T16:50:00Z",
+            "open": 3716,
+            "high": 3745,
+            "low": 3712,
+            "close": 3740,
+            "indicator": 3709
+          }
+        ]
+      },
+      {
+        "exchange": "NSE",
+        "tradingsymbol": "INFY",
+        "ltp": 1498.6,
+        "liveBreakAboveCandle2High": true,
+        "hit": {
+          "candle2High": 1488,
+          "candle3": {
+            "time": "2026-02-08T16:45:00.000Z",
+            "close": 1495.1
+          }
+        },
+        "candles": [
+          {
+            "time": "2026-02-08T16:15:00Z",
+            "open": 1475,
+            "high": 1480,
+            "low": 1470,
+            "close": 1474,
+            "indicator": 1486
+          },
+          {
+            "time": "2026-02-08T16:20:00Z",
+            "open": 1474,
+            "high": 1488,
+            "low": 1472,
+            "close": 1480,
+            "indicator": 1485
+          },
+          {
+            "time": "2026-02-08T16:25:00Z",
+            "open": 1480,
+            "high": 1482,
+            "low": 1476,
+            "close": 1478,
+            "indicator": 1484
+          },
+          {
+            "time": "2026-02-08T16:30:00Z",
+            "open": 1478,
+            "high": 1480,
+            "low": 1472,
+            "close": 1475,
+            "indicator": 1483
+          },
+          {
+            "time": "2026-02-08T16:35:00Z",
+            "open": 1475,
+            "high": 1480,
+            "low": 1474,
+            "close": 1478,
+            "indicator": 1482
+          },
+          {
+            "time": "2026-02-08T16:40:00Z",
+            "open": 1478,
+            "high": 1495,
+            "low": 1476,
+            "close": 1492,
+            "indicator": 1481
+          }
+        ]
+      },
+      {
+        "exchange": "NSE",
+        "tradingsymbol": "HDFCBANK",
+        "ltp": 1685.4,
+        "liveBreakAboveCandle2High": false,
+        "hit": {
+          "candle2High": 1692,
+          "candle3": {
+            "time": "2026-02-08T16:40:00.000Z",
+            "close": 1688.5
+          }
+        },
+        "candles": [
+          {
+            "time": "2026-02-08T16:10:00Z",
+            "open": 1678,
+            "high": 1682,
+            "low": 1674,
+            "close": 1676,
+            "indicator": 1688
+          },
+          {
+            "time": "2026-02-08T16:15:00Z",
+            "open": 1676,
+            "high": 1692,
+            "low": 1675,
+            "close": 1686,
+            "indicator": 1687
+          },
+          {
+            "time": "2026-02-08T16:20:00Z",
+            "open": 1686,
+            "high": 1688,
+            "low": 1678,
+            "close": 1682,
+            "indicator": 1686
+          },
+          {
+            "time": "2026-02-08T16:25:00Z",
+            "open": 1682,
+            "high": 1686,
+            "low": 1676,
+            "close": 1680,
+            "indicator": 1685
+          },
+          {
+            "time": "2026-02-08T16:30:00Z",
+            "open": 1680,
+            "high": 1684,
+            "low": 1678,
+            "close": 1681,
+            "indicator": 1684
+          },
+          {
+            "time": "2026-02-08T16:35:00Z",
+            "open": 1681,
+            "high": 1689,
+            "low": 1679,
+            "close": 1688,
+            "indicator": 1683
+          }
+        ]
+      }
+    ]
+  }
+]

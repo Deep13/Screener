@@ -1,0 +1,62 @@
+[
+  {
+    "id": "1769456346114",
+    "ts": "2026-01-26T19:39:06.114Z",
+    "params": {
+      "preset": "today",
+      "timeframe": "5m",
+      "interval": "FIVE_MINUTE",
+      "indicator": "VWAP",
+      "window": 20,
+      "candle1Side": "BELOW",
+      "breakoutMode": "CLOSE",
+      "confirmWithLTP": true
+    },
+    "results": []
+  },
+  {
+    "id": "1769456358692",
+    "ts": "2026-01-26T19:39:18.692Z",
+    "params": {
+      "preset": "today",
+      "timeframe": "5m",
+      "interval": "FIVE_MINUTE",
+      "indicator": "VWAP",
+      "window": 20,
+      "candle1Side": "BELOW",
+      "breakoutMode": "CLOSE",
+      "confirmWithLTP": true
+    },
+    "results": []
+  },
+  {
+    "id": "1769456371594",
+    "ts": "2026-01-26T19:39:31.594Z",
+    "params": {
+      "preset": "today",
+      "timeframe": "5m",
+      "interval": "FIVE_MINUTE",
+      "indicator": "VWAP",
+      "window": 20,
+      "candle1Side": "BELOW",
+      "breakoutMode": "CLOSE",
+      "confirmWithLTP": true
+    },
+    "results": []
+  },
+  {
+    "id": "1769456392891",
+    "ts": "2026-01-26T19:39:52.891Z",
+    "params": {
+      "preset": "today",
+      "timeframe": "5m",
+      "interval": "FIVE_MINUTE",
+      "indicator": "SMA",
+      "window": 20,
+      "candle1Side": "BELOW",
+      "breakoutMode": "CLOSE",
+      "confirmWithLTP": true
+    },
+    "results": []
+  }
+]
