@@ -202,11 +202,23 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
-
+function fmtTime(t) {
+  // supports ISO string OR epoch ms string/number
+  const n = typeof t === "string" && /^\d+$/.test(t) ? Number(t) : t;
+  return new Date(n).toLocaleString();
+}
     $("run").addEventListener("click", async () => {
       getStockData();
     });
-
+function parseIST(ts) {
+  // ts like: "2026-02-09 12:10" OR "2026-02-09 12:10:00"
+  // Convert to ISO with IST offset so it is unambiguous.
+  if (typeof ts === "string" && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(ts)) {
+    const iso = ts.replace(" ", "T");
+    return new Date(iso + ":00+05:30"); // add seconds + IST offset
+  }
+  return new Date(ts);
+}
     async function getStockData() {
       $("status").textContent = "Running...";
       $("table").style.display = "none";
@@ -282,7 +294,7 @@
     // ----- TAB + CHART FOR EACH MATCH -----
     const candles = r.candles;
     if (candles && candles.length) {
-      const dates = candles.map((c) => c.time);
+      const dates = candles.map(c => parseIST(c.time));
       const opens = candles.map((c) => c.open);
       const highs = candles.map((c) => c.high);
       const lows = candles.map((c) => c.low);
@@ -306,6 +318,58 @@
       chartDiv.id = chartId;
 
       panel.appendChild(chartDiv);
+// ---- Candle 1/2/3 summary table below the chart ----
+const c1i = r.hit?.candle1Index;
+const c2i = r.hit?.candle2Index;
+const c3i = r.hit?.candle3Index;
+
+const c1 = Number.isFinite(c1i) ? candles[c1i] : null;
+const c2 = Number.isFinite(c2i) ? candles[c2i] : null;
+const c3 = Number.isFinite(c3i) ? candles[c3i] : (r.hit?.candle3 ?? null);
+
+const infoTable = document.createElement("table");
+infoTable.style.marginTop = "10px";
+infoTable.style.width = "100%";
+infoTable.style.borderCollapse = "collapse";
+
+infoTable.innerHTML = `
+  <thead>
+    <tr>
+      <th style="border:1px solid #ddd; padding:8px; background:#f6f6f6;">Candle</th>
+      <th style="border:1px solid #ddd; padding:8px; background:#f6f6f6;">Time</th>
+      <th style="border:1px solid #ddd; padding:8px; background:#f6f6f6;">Close</th>
+      <th style="border:1px solid #ddd; padding:8px; background:#f6f6f6;">Indicator</th>
+      <th style="border:1px solid #ddd; padding:8px; background:#f6f6f6;">High</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="border:1px solid #ddd; padding:8px;"><b>Candle-1</b></td>
+      <td style="border:1px solid #ddd; padding:8px;">${c1?.time ? fmtTime(c1.time) : ""}</td>
+      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c1?.close) ? c1.close.toFixed(2) : ""}</td>
+      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c1?.indicator) ? c1.indicator.toFixed(2) : ""}</td>
+      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c1?.high) ? c1.high.toFixed(2) : ""}</td>
+    </tr>
+
+    <tr>
+      <td style="border:1px solid #ddd; padding:8px;"><b>Candle-2</b></td>
+      <td style="border:1px solid #ddd; padding:8px;">${c2?.time ? fmtTime(c2.time) : ""}</td>
+      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c2?.close) ? c2.close.toFixed(2) : ""}</td>
+      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c2?.indicator) ? c2.indicator.toFixed(2) : ""}</td>
+      <td style="border:1px solid #ddd; padding:8px;"><b>${Number.isFinite(c2?.high) ? c2.high.toFixed(2) : ""}</b></td>
+    </tr>
+
+    <tr>
+      <td style="border:1px solid #ddd; padding:8px;"><b>Candle-3</b></td>
+      <td style="border:1px solid #ddd; padding:8px;">${c3?.time ? fmtTime(c3.time) : ""}</td>
+      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c3?.close) ? c3.close.toFixed(2) : ""}</td>
+      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c3?.indicator) ? c3.indicator.toFixed(2) : ""}</td>
+      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c3?.high) ? c3.high.toFixed(2) : ""}</td>
+    </tr>
+  </tbody>
+`;
+
+panel.appendChild(infoTable);
 
       $("tabs").appendChild(tabBtn);
       $("tab-panels").appendChild(panel);
@@ -320,30 +384,73 @@
         // safer resize: pass DOM element
         Plotly.Plots.resize(document.getElementById(chartId));
       });
+// const c1i = r.hit?.candle1Index;
+// const c2i = r.hit?.candle2Index;
+// const c3i = r.hit?.candle3Index;
 
+const markX = [];
+const markY = [];
+const markText = [];
+const markColor = [];
+
+if (Number.isFinite(c1i) && candles[c1i]) {
+  markX.push(dates[c1i]);
+  markY.push(candles[c1i].indicator);
+  markText.push("C1");
+  markColor.push("#e53935"); // red
+}
+
+if (Number.isFinite(c2i) && candles[c2i]) {
+  markX.push(dates[c2i]);
+  markY.push(candles[c2i].indicator);
+  markText.push("C2");
+  markColor.push("#fb8c00"); // orange
+}
+
+if (Number.isFinite(c3i) && candles[c3i]) {
+  markX.push(dates[c3i]);
+  markY.push(candles[c3i].indicator);
+  markText.push("C3");
+  markColor.push("#43a047"); // green
+}
       const data = [
-        {
-          x: dates,
-          open: opens,
-          high: highs,
-          low: lows,
-          close: closes,
-          type: "candlestick",
-          name: r.tradingsymbol,
-        },
-        {
-          x: dates,
-          y: indicatorValues,
-          type: "scatter",
-          mode: "lines",
-          name: `${$("indicator").value} (${$("window").value})`,
-          line: { width: 2, color: "#ff9800" },
-        },
-      ];
+  {
+    x: dates,
+    open: opens,
+    high: highs,
+    low: lows,
+    close: closes,
+    type: "candlestick",
+    name: r.tradingsymbol,
+  },
+  {
+    x: dates,
+    y: indicatorValues,
+    type: "scatter",
+    mode: "lines",
+    name: `${$("indicator").value} (${$("window").value})`,
+    line: { width: 2, color: "#ff9800" },
+  },
+  {
+    x: markX,
+    y: markY,
+    type: "scatter",
+    mode: "markers+text",
+    text: markText,
+    textposition: "top center",
+    marker: {
+      size: 10,
+      color: markColor,
+      symbol: "circle",
+    },
+    name: "Candle signals",
+    showlegend: false,
+  }
+];
 
       const layout = {
         title: `${r.tradingsymbol} – Candles + ${$("indicator").value}`,
-        xaxis: { rangeslider: { visible: false } },
+       xaxis: { type: "date", rangeslider: { visible: false } },
         yaxis: { title: "Price (INR)" },
         legend: { orientation: "h", y: 1.1 },
         margin: { t: 50, r: 20, b: 40, l: 60 },
@@ -534,13 +641,18 @@
     function formatUTC(ts) {
   const d = new Date(ts);
 
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(d.getUTCDate()).padStart(2, "0");
+  // const yyyy = d.getUTCFullYear();
+  // const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  // const dd = String(d.getUTCDate()).padStart(2, "0");
 
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const mi = String(d.getUTCMinutes()).padStart(2, "0");
+  // const hh = String(d.getUTCHours()).padStart(2, "0");
+  // const mi = String(d.getUTCMinutes()).padStart(2, "0");
 
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd} ${hh}:${mi} UTC`;
 }
   </script>
