@@ -39,7 +39,8 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
-const RESULTS_FILE = path.join(__dirname, "/tmp/results_history_new.json");
+// const RESULTS_FILE = path.join(__dirname, "/tmp/results_history_new.json");
+const RESULTS_FILE = "/tmp/results_history_new.json";
 const MAX_HISTORY = 200;
 // ------------------------------------------------------------
 // Default watchlist (10 stocks). Adjust anytime.
