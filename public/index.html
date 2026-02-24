@@ -267,7 +267,26 @@ function parseIST(ts) {
         $("status").textContent = "Error: " + (e.message || e);
       }
     }
-   function renderChartTable(rows) {
+    function calculateBollingerBands(candles, window = 20, numDev = 2) {
+  const closes = candles.map(c => c.close);
+  const upperBand = [];
+  const lowerBand = [];
+  const middleBand = [];
+  
+  for (let i = window - 1; i < closes.length; i++) {
+    const slice = closes.slice(i - window + 1, i + 1);
+    const sma = slice.reduce((sum, value) => sum + value, 0) / window; // Middle band: SMA
+    const variance = slice.reduce((sum, value) => sum + Math.pow(value - sma, 2), 0) / window; // Variance
+    const stdDev = Math.sqrt(variance); // Standard deviation
+    
+    upperBand.push(sma + numDev * stdDev); // Upper band
+    lowerBand.push(sma - numDev * stdDev); // Lower band
+    middleBand.push(sma); // Middle band
+  }
+  
+  return { upperBand, lowerBand, middleBand };
+}
+function renderChartTable(rows) {
   const tbody = document.querySelector("#table tbody");
   tbody.innerHTML = "";
 
@@ -301,6 +320,9 @@ function parseIST(ts) {
       const closes = candles.map((c) => c.close);
       const indicatorValues = candles.map((c) => c.indicator);
 
+      // Calculate Bollinger Bands (Middle, Upper, Lower Bands)
+      const { upperBand, lowerBand, middleBand } = calculateBollingerBands(candles, 20, 2);
+
       // Create tab button
       const tabBtn = document.createElement("button");
       tabBtn.className = "tab-btn";
@@ -318,58 +340,6 @@ function parseIST(ts) {
       chartDiv.id = chartId;
 
       panel.appendChild(chartDiv);
-// ---- Candle 1/2/3 summary table below the chart ----
-const c1i = r.hit?.candle1Index;
-const c2i = r.hit?.candle2Index;
-const c3i = r.hit?.candle3Index;
-
-const c1 = Number.isFinite(c1i) ? candles[c1i] : null;
-const c2 = Number.isFinite(c2i) ? candles[c2i] : null;
-const c3 = Number.isFinite(c3i) ? candles[c3i] : (r.hit?.candle3 ?? null);
-
-const infoTable = document.createElement("table");
-infoTable.style.marginTop = "10px";
-infoTable.style.width = "100%";
-infoTable.style.borderCollapse = "collapse";
-
-infoTable.innerHTML = `
-  <thead>
-    <tr>
-      <th style="border:1px solid #ddd; padding:8px; background:#f6f6f6;">Candle</th>
-      <th style="border:1px solid #ddd; padding:8px; background:#f6f6f6;">Time</th>
-      <th style="border:1px solid #ddd; padding:8px; background:#f6f6f6;">Close</th>
-      <th style="border:1px solid #ddd; padding:8px; background:#f6f6f6;">Indicator</th>
-      <th style="border:1px solid #ddd; padding:8px; background:#f6f6f6;">High</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td style="border:1px solid #ddd; padding:8px;"><b>Candle-1</b></td>
-      <td style="border:1px solid #ddd; padding:8px;">${c1?.time ? fmtTime(c1.time) : ""}</td>
-      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c1?.close) ? c1.close.toFixed(2) : ""}</td>
-      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c1?.indicator) ? c1.indicator.toFixed(2) : ""}</td>
-      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c1?.high) ? c1.high.toFixed(2) : ""}</td>
-    </tr>
-
-    <tr>
-      <td style="border:1px solid #ddd; padding:8px;"><b>Candle-2</b></td>
-      <td style="border:1px solid #ddd; padding:8px;">${c2?.time ? fmtTime(c2.time) : ""}</td>
-      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c2?.close) ? c2.close.toFixed(2) : ""}</td>
-      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c2?.indicator) ? c2.indicator.toFixed(2) : ""}</td>
-      <td style="border:1px solid #ddd; padding:8px;"><b>${Number.isFinite(c2?.high) ? c2.high.toFixed(2) : ""}</b></td>
-    </tr>
-
-    <tr>
-      <td style="border:1px solid #ddd; padding:8px;"><b>Candle-3</b></td>
-      <td style="border:1px solid #ddd; padding:8px;">${c3?.time ? fmtTime(c3.time) : ""}</td>
-      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c3?.close) ? c3.close.toFixed(2) : ""}</td>
-      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c3?.indicator) ? c3.indicator.toFixed(2) : ""}</td>
-      <td style="border:1px solid #ddd; padding:8px;">${Number.isFinite(c3?.high) ? c3.high.toFixed(2) : ""}</td>
-    </tr>
-  </tbody>
-`;
-
-panel.appendChild(infoTable);
 
       $("tabs").appendChild(tabBtn);
       $("tab-panels").appendChild(panel);
@@ -384,73 +354,55 @@ panel.appendChild(infoTable);
         // safer resize: pass DOM element
         Plotly.Plots.resize(document.getElementById(chartId));
       });
-// const c1i = r.hit?.candle1Index;
-// const c2i = r.hit?.candle2Index;
-// const c3i = r.hit?.candle3Index;
 
-const markX = [];
-const markY = [];
-const markText = [];
-const markColor = [];
-
-if (Number.isFinite(c1i) && candles[c1i]) {
-  markX.push(dates[c1i]);
-  markY.push(candles[c1i].indicator);
-  markText.push("C1");
-  markColor.push("#e53935"); // red
-}
-
-if (Number.isFinite(c2i) && candles[c2i]) {
-  markX.push(dates[c2i]);
-  markY.push(candles[c2i].indicator);
-  markText.push("C2");
-  markColor.push("#fb8c00"); // orange
-}
-
-if (Number.isFinite(c3i) && candles[c3i]) {
-  markX.push(dates[c3i]);
-  markY.push(candles[c3i].indicator);
-  markText.push("C3");
-  markColor.push("#43a047"); // green
-}
+      // Plotly data (candles + indicator line + Bollinger Bands)
       const data = [
-  {
-    x: dates,
-    open: opens,
-    high: highs,
-    low: lows,
-    close: closes,
-    type: "candlestick",
-    name: r.tradingsymbol,
-  },
-  {
-    x: dates,
-    y: indicatorValues,
-    type: "scatter",
-    mode: "lines",
-    name: `${$("indicator").value} (${$("window").value})`,
-    line: { width: 2, color: "#ff9800" },
-  },
-  {
-    x: markX,
-    y: markY,
-    type: "scatter",
-    mode: "markers+text",
-    text: markText,
-    textposition: "top center",
-    marker: {
-      size: 10,
-      color: markColor,
-      symbol: "circle",
-    },
-    name: "Candle signals",
-    showlegend: false,
-  }
-];
+        {
+          x: dates,
+          open: opens,
+          high: highs,
+          low: lows,
+          close: closes,
+          type: "candlestick",
+          name: r.tradingsymbol,
+        },
+        {
+          x: dates,
+          y: indicatorValues,
+          type: "scatter",
+          mode: "lines",
+          name: `${$("indicator").value} (${$("window").value})`,
+          line: { width: 2, color: "#ff9800" },
+        },
+        {
+          x: dates.slice(19), // For the bands, skip the first 19 candles (since we need at least 20 for the moving average)
+          y: upperBand,
+          type: "scatter",
+          mode: "lines",
+          name: "Upper Band",
+          line: { width: 1, color: "green", dash: "dash" },
+        },
+        {
+          x: dates.slice(19),
+          y: lowerBand,
+          type: "scatter",
+          mode: "lines",
+          name: "Lower Band",
+          line: { width: 1, color: "red", dash: "dash" },
+        },
+        {
+          x: dates.slice(19),
+          y: middleBand,
+          type: "scatter",
+          mode: "lines",
+          name: "Middle Band (SMA)",
+          line: { width: 2, color: "blue" },
+        },
+      ];
 
       const layout = {
-        title: `${r.tradingsymbol} – Candles + ${$("indicator").value}`,
-       xaxis: { type: "date", rangeslider: { visible: false } },
+        title: `${r.tradingsymbol} – Candles + Bollinger Bands`,
+        xaxis: { type: "date", rangeslider: { visible: false } },
         yaxis: { title: "Price (INR)" },
         legend: { orientation: "h", y: 1.1 },
         margin: { t: 50, r: 20, b: 40, l: 60 },
@@ -465,8 +417,7 @@ if (Number.isFinite(c3i) && candles[c3i]) {
 
   $("table").style.display = rows.length ? "table" : "none";
 }
-
-    async function fetchHistoryAndRender() {
+async function fetchHistoryAndRender() {
       const resp = await fetch("/api/history");
       const json = await resp.json();
       if (!json.ok) return;
