@@ -97,10 +97,89 @@
       width: 100%;
       height: 420px;
     }
+
+    .panel-header {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 6px;
+    }
+
+    .btn-fullscreen {
+      padding: 5px 12px;
+      font-size: 12px;
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .btn-fullscreen:hover {
+      background: #e0e0e0;
+    }
+
+    .candle-detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 13px;
+    }
+
+    .candle-detail-table th {
+      background: #f0f4ff;
+      padding: 7px 10px;
+      border: 1px solid #d0d8f0;
+      text-align: center;
+    }
+
+    .candle-detail-table td {
+      padding: 6px 10px;
+      border: 1px solid #e0e0e0;
+      text-align: center;
+    }
+
+    .candle-detail-table tr.c1-row td { background: #fff8e1; }
+    .candle-detail-table tr.c2-row td { background: #e8f5e9; }
+    .candle-detail-table tr.c3-row td { background: #e3f2fd; }
+
+    /* Fullscreen overlay */
+    #fullscreen-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #fff;
+      z-index: 9999;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+
+    #fullscreen-overlay.active { display: flex; flex-direction: column; }
+
+    #fullscreen-chart {
+      flex: 1;
+      width: 100%;
+    }
+
+    #fullscreen-close {
+      align-self: flex-end;
+      margin-bottom: 10px;
+      padding: 6px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #333;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+    }
   </style>
 </head>
 
 <body>
+  <!-- Fullscreen overlay -->
+  <div id="fullscreen-overlay">
+    <button id="fullscreen-close" onclick="closeFullscreen()">✕ Close Fullscreen</button>
+    <div id="fullscreen-chart"></div>
+  </div>
+
   <div style="display:flex;justify-content: space-between;">
     <div style="flex:1">
       <h2>3-Candle Screener</h2>
@@ -132,17 +211,25 @@
 
         <div>
           <label>Indicator</label>
-          <select id="indicator">
+          <select id="indicator" onchange="onIndicatorChange()">
              <option value="SMA">SMA</option>
             <option value="VWAP" selected>VWAP</option>
             <option value="EMA">EMA</option>
             <option value="CLOSE">CLOSE</option>
+            <option value="BOLLINGER_BAND">Bollinger Band</option>
+            <option value="BOLLINGER_UPPER">Bollinger Upper</option>
+            <option value="BOLLINGER_LOWER">Bollinger Lower</option>
           </select>
         </div>
 
         <div>
           <label>Window</label>
           <input id="window" type="number" min="2" max="200" value="20" />
+        </div>
+
+        <div id="stdDevContainer" style="display:none;">
+          <label>Std Deviation</label>
+          <input id="stdDev" type="number" min="0.1" max="5" step="0.1" value="2" style="width:80px;" />
         </div>
 
         <div>
@@ -202,6 +289,22 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+
+    // Shared state: set in getStockData(), read in renderChartTable()
+    let serverIndicator = "SMA";
+    let lastRows = []; // cache last screener results for live re-render
+
+    function isBollingerIndicator(val) {
+      return ["BOLLINGER_BAND", "BOLLINGER_UPPER", "BOLLINGER_LOWER"].includes(val);
+    }
+
+    function onIndicatorChange() {
+      const val = $("indicator").value;
+      $("stdDevContainer").style.display = isBollingerIndicator(val) ? "" : "none";
+    }
+
+    // Run once on load in case of page restore
+    onIndicatorChange();
 function fmtTime(t) {
   // supports ISO string OR epoch ms string/number
   const n = typeof t === "string" && /^\d+$/.test(t) ? Number(t) : t;
@@ -229,10 +332,14 @@ function parseIST(ts) {
       $("tabs").innerHTML = "";
       $("tab-panels").innerHTML = "";
 
+      const selectedIndicator = $("indicator").value;
+      serverIndicator = isBollingerIndicator(selectedIndicator) ? "SMA" : selectedIndicator;
+      const stdDev = parseFloat($("stdDev").value) || 2;
+
       const payload = {
         preset: $("preset").value,
         timeframe: $("timeframe").value,
-        indicator: $("indicator").value,
+        indicator: serverIndicator,
         window: Number($("window").value),
         candle1Side: $("candle1Side").value,
         breakoutMode: $("breakoutMode").value,
@@ -287,6 +394,7 @@ function parseIST(ts) {
   return { upperBand, lowerBand, middleBand };
 }
 function renderChartTable(rows) {
+  lastRows = rows; // cache for live re-render on stdDev change
   const tbody = document.querySelector("#table tbody");
   tbody.innerHTML = "";
 
@@ -321,7 +429,12 @@ function renderChartTable(rows) {
       const indicatorValues = candles.map((c) => c.indicator);
 
       // Calculate Bollinger Bands (Middle, Upper, Lower Bands)
-      const { upperBand, lowerBand, middleBand } = calculateBollingerBands(candles, 20, 2);
+      const bollingerWindow = Number($("window").value) || 20;
+      const bollingerStdDev = parseFloat($("stdDev").value) || 2;
+      const { upperBand, lowerBand, middleBand } = calculateBollingerBands(candles, bollingerWindow, bollingerStdDev);
+      const chosenIndicator = $("indicator").value;
+      const bollingerOffset = bollingerWindow - 1;
+      const bollingerDates = dates.slice(bollingerOffset);
 
       // Create tab button
       const tabBtn = document.createElement("button");
@@ -332,14 +445,84 @@ function renderChartTable(rows) {
       const panel = document.createElement("div");
       panel.className = "tab-panel";
 
+      // Panel header with fullscreen button
+      const panelHeader = document.createElement("div");
+      panelHeader.className = "panel-header";
+      const fsBtn = document.createElement("button");
+      fsBtn.className = "btn-fullscreen";
+      fsBtn.textContent = "⛶ Fullscreen";
+      panelHeader.appendChild(fsBtn);
+      panel.appendChild(panelHeader);
+
       // Chart div inside panel
       const chartDiv = document.createElement("div");
       chartDiv.className = "chart-box";
 
       const chartId = `chart-${r.exchange}-${r.tradingsymbol}`.replace(/[^a-zA-Z0-9-_]/g, "");
       chartDiv.id = chartId;
-
       panel.appendChild(chartDiv);
+
+      // --- C1 / C2 / C3 candle indices from hit ---
+      const hit = r.hit;
+      const c1Idx = hit?.candle1Index ?? null;
+      const c2Idx = hit?.candle2Index ?? null;
+      const c3Idx = hit?.candle3Index ?? null;
+      const c1 = c1Idx !== null ? candles[c1Idx] : null;
+      const c2 = c2Idx !== null ? candles[c2Idx] : null;
+      const c3 = c3Idx !== null ? candles[c3Idx] : null;
+
+      // Candle detail table below chart
+      function fmtN(v) { return Number.isFinite(v) ? v.toFixed(2) : "—"; }
+      function fmtT(t) { return t ? formatUTC(t) : "—"; }
+      const candleTable = document.createElement("table");
+      candleTable.className = "candle-detail-table";
+      candleTable.innerHTML = `
+        <thead>
+          <tr>
+            <th>Candle</th>
+            <th>Time</th>
+            <th>Open</th>
+            <th>High</th>
+            <th>Low</th>
+            <th>Close</th>
+            <th>Volume</th>
+            <th>Indicator</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="c1-row">
+            <td><strong>C1</strong></td>
+            <td>${fmtT(c1?.time)}</td>
+            <td>${fmtN(c1?.open)}</td>
+            <td>${fmtN(c1?.high)}</td>
+            <td>${fmtN(c1?.low)}</td>
+            <td>${fmtN(c1?.close)}</td>
+            <td>${c1?.volume ?? "—"}</td>
+            <td>${fmtN(c1?.indicator)}</td>
+          </tr>
+          <tr class="c2-row">
+            <td><strong>C2</strong></td>
+            <td>${fmtT(c2?.time)}</td>
+            <td>${fmtN(c2?.open)}</td>
+            <td>${fmtN(c2?.high)}</td>
+            <td>${fmtN(c2?.low)}</td>
+            <td>${fmtN(c2?.close)}</td>
+            <td>${c2?.volume ?? "—"}</td>
+            <td>${fmtN(c2?.indicator)}</td>
+          </tr>
+          <tr class="c3-row">
+            <td><strong>C3</strong></td>
+            <td>${fmtT(c3?.time)}</td>
+            <td>${fmtN(c3?.open)}</td>
+            <td>${fmtN(c3?.high)}</td>
+            <td>${fmtN(c3?.low)}</td>
+            <td>${fmtN(c3?.close)}</td>
+            <td>${c3?.volume ?? "—"}</td>
+            <td>${fmtN(c3?.indicator)}</td>
+          </tr>
+        </tbody>
+      `;
+      panel.appendChild(candleTable);
 
       $("tabs").appendChild(tabBtn);
       $("tab-panels").appendChild(panel);
@@ -347,15 +530,12 @@ function renderChartTable(rows) {
       tabBtn.addEventListener("click", () => {
         document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
         document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
-
         tabBtn.classList.add("active");
         panel.classList.add("active");
-
-        // safer resize: pass DOM element
         Plotly.Plots.resize(document.getElementById(chartId));
       });
 
-      // Plotly data (candles + indicator line + Bollinger Bands)
+      // Plotly data (candles + indicator line + conditional Bollinger Bands)
       const data = [
         {
           x: dates,
@@ -371,44 +551,83 @@ function renderChartTable(rows) {
           y: indicatorValues,
           type: "scatter",
           mode: "lines",
-          name: `${$("indicator").value} (${$("window").value})`,
+          name: `${serverIndicator} (${$("window").value})`,
           line: { width: 2, color: "#ff9800" },
-        },
-        {
-          x: dates.slice(19), // For the bands, skip the first 19 candles (since we need at least 20 for the moving average)
-          y: upperBand,
-          type: "scatter",
-          mode: "lines",
-          name: "Upper Band",
-          line: { width: 1, color: "green", dash: "dash" },
-        },
-        {
-          x: dates.slice(19),
-          y: lowerBand,
-          type: "scatter",
-          mode: "lines",
-          name: "Lower Band",
-          line: { width: 1, color: "red", dash: "dash" },
-        },
-        {
-          x: dates.slice(19),
-          y: middleBand,
-          type: "scatter",
-          mode: "lines",
-          name: "Middle Band (SMA)",
-          line: { width: 2, color: "blue" },
         },
       ];
 
+      // Add Bollinger traces based on selected indicator
+      if (chosenIndicator === "BOLLINGER_BAND") {
+        data.push({
+          x: bollingerDates, y: upperBand,
+          type: "scatter", mode: "lines",
+          name: `Upper Band (σ×${bollingerStdDev})`,
+          line: { width: 1, color: "green", dash: "dash" },
+        });
+        data.push({
+          x: bollingerDates, y: lowerBand,
+          type: "scatter", mode: "lines",
+          name: `Lower Band (σ×${bollingerStdDev})`,
+          line: { width: 1, color: "red", dash: "dash" },
+        });
+        data.push({
+          x: bollingerDates, y: middleBand,
+          type: "scatter", mode: "lines",
+          name: "Middle Band (SMA)",
+          line: { width: 2, color: "blue" },
+        });
+      } else if (chosenIndicator === "BOLLINGER_UPPER") {
+        data.push({
+          x: bollingerDates, y: upperBand,
+          type: "scatter", mode: "lines",
+          name: `Bollinger Upper (σ×${bollingerStdDev})`,
+          line: { width: 1.5, color: "green", dash: "dash" },
+        });
+      } else if (chosenIndicator === "BOLLINGER_LOWER") {
+        data.push({
+          x: bollingerDates, y: lowerBand,
+          type: "scatter", mode: "lines",
+          name: `Bollinger Lower (σ×${bollingerStdDev})`,
+          line: { width: 1.5, color: "red", dash: "dash" },
+        });
+      }
+
+      // --- C1 / C2 / C3 marker traces ---
+      const markerDefs = [
+        { candle: c1, idx: c1Idx, label: "C1", color: "#f57f17", symbol: "triangle-up" },
+        { candle: c2, idx: c2Idx, label: "C2", color: "#2e7d32", symbol: "circle" },
+        { candle: c3, idx: c3Idx, label: "C3", color: "#1565c0", symbol: "star" },
+      ];
+      for (const { candle, idx, label, color, symbol } of markerDefs) {
+        if (candle && idx !== null) {
+          data.push({
+            x: [dates[idx]],
+            y: [candle.high * 1.002],   // slightly above the candle high
+            type: "scatter",
+            mode: "markers+text",
+            name: label,
+            text: [label],
+            textposition: "top center",
+            marker: { symbol, size: 14, color },
+            textfont: { size: 12, color, family: "Arial Black" },
+            showlegend: true,
+          });
+        }
+      }
+
       const layout = {
-        title: `${r.tradingsymbol} – Candles + Bollinger Bands`,
+        title: `${r.tradingsymbol} – Candles + ${chosenIndicator.replace(/_/g, " ")}`,
         xaxis: { type: "date", rangeslider: { visible: false } },
         yaxis: { title: "Price (INR)" },
         legend: { orientation: "h", y: 1.1 },
         margin: { t: 50, r: 20, b: 40, l: 60 },
       };
 
+      Plotly.purge(chartId);
       Plotly.newPlot(chartId, data, layout);
+
+      // Fullscreen button wiring
+      fsBtn.addEventListener("click", () => openFullscreen(chartId, data, layout));
     }
   }
 
@@ -532,7 +751,11 @@ async function fetchHistoryAndRender() {
   // Optional: update the top controls to reflect saved run params
   if (item.params?.preset) $("preset").value = item.params.preset;
   if (item.params?.timeframe) $("timeframe").value = item.params.timeframe;
-  if (item.params?.indicator) $("indicator").value = item.params.indicator;
+  if (item.params?.indicator) {
+    // History stores server-side indicator (e.g. SMA). Keep UI as-is if it's a Bollinger variant.
+    const uiInd = $("indicator").value;
+    if (!isBollingerIndicator(uiInd)) $("indicator").value = item.params.indicator;
+  }
   if (Number.isFinite(item.params?.window)) $("window").value = item.params.window;
   if (item.params?.candle1Side) $("candle1Side").value = item.params.candle1Side;
   if (item.params?.breakoutMode) $("breakoutMode").value = item.params.breakoutMode;
@@ -588,6 +811,20 @@ async function fetchHistoryAndRender() {
     // });
 
     fetchHistoryAndRender();
+
+    function openFullscreen(chartId, data, layout) {
+      const overlay = $("fullscreen-overlay");
+      const fsChart = $("fullscreen-chart");
+      overlay.classList.add("active");
+      Plotly.purge(fsChart);
+      const fsLayout = Object.assign({}, layout, { height: window.innerHeight - 120 });
+      Plotly.newPlot(fsChart, data, fsLayout, { responsive: true });
+    }
+
+    function closeFullscreen() {
+      $("fullscreen-overlay").classList.remove("active");
+      Plotly.purge($("fullscreen-chart"));
+    }
 
     function formatUTC(ts) {
   const d = new Date(ts);
