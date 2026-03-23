@@ -42,57 +42,149 @@ app.use(express.json());
 const RESULTS_FILE = path.join(__dirname, "results_history_new.json");
 const MAX_HISTORY = 200;
 // ------------------------------------------------------------
-// Default watchlist (10 stocks). Adjust anytime.
+// Default watchlist (~130 large / midcap stocks).
 const DEFAULT_STOCKS = [
+  // A
+  { exchange: "NSE", tradingsymbol: "ABB-EQ" },
+  { exchange: "NSE", tradingsymbol: "ABBOTINDIA-EQ" },
   { exchange: "NSE", tradingsymbol: "ADANIENT-EQ" },
+  { exchange: "NSE", tradingsymbol: "ADANIGREEN-EQ" },
   { exchange: "NSE", tradingsymbol: "ADANIPORTS-EQ" },
+  { exchange: "NSE", tradingsymbol: "ADANIPOWER-EQ" },
+  { exchange: "NSE", tradingsymbol: "ATGL-EQ" },
+  { exchange: "NSE", tradingsymbol: "ABCAPITAL-EQ" },
+  { exchange: "NSE", tradingsymbol: "ABFRL-EQ" },
+  { exchange: "NSE", tradingsymbol: "APLAPOLLO-EQ" },
   { exchange: "NSE", tradingsymbol: "APOLLOHOSP-EQ" },
+  { exchange: "NSE", tradingsymbol: "APOLLOTYRE-EQ" },
+  { exchange: "NSE", tradingsymbol: "ASHOKLEY-EQ" },
   { exchange: "NSE", tradingsymbol: "ASIANPAINT-EQ" },
-  { exchange: "NSE", tradingsymbol: "AXISBANK-EQ" },
+  { exchange: "NSE", tradingsymbol: "ASTRAL-EQ" },
+  { exchange: "NSE", tradingsymbol: "AUBANK-EQ" },
+  { exchange: "NSE", tradingsymbol: "AUROPHARMA-EQ" },
+  // B
   { exchange: "NSE", tradingsymbol: "BAJAJ-AUTO-EQ" },
   { exchange: "NSE", tradingsymbol: "BAJFINANCE-EQ" },
   { exchange: "NSE", tradingsymbol: "BAJAJFINSV-EQ" },
+  { exchange: "NSE", tradingsymbol: "BAJAJHLDNG-EQ" },
+  { exchange: "NSE", tradingsymbol: "BALKRISIND-EQ" },
+  { exchange: "NSE", tradingsymbol: "BANDHANBNK-EQ" },
+  { exchange: "NSE", tradingsymbol: "BANKBARODA-EQ" },
+  { exchange: "NSE", tradingsymbol: "BERGEPAINT-EQ" },
+  { exchange: "NSE", tradingsymbol: "BEL-EQ" },
+  { exchange: "NSE", tradingsymbol: "BHARATFORG-EQ" },
+  { exchange: "NSE", tradingsymbol: "BHEL-EQ" },
   { exchange: "NSE", tradingsymbol: "BPCL-EQ" },
   { exchange: "NSE", tradingsymbol: "BHARTIARTL-EQ" },
+  { exchange: "NSE", tradingsymbol: "BIOCON-EQ" },
+  { exchange: "NSE", tradingsymbol: "BOSCHLTD-EQ" },
   { exchange: "NSE", tradingsymbol: "BRITANNIA-EQ" },
+  // C
+  { exchange: "NSE", tradingsymbol: "CANBK-EQ" },
+  { exchange: "NSE", tradingsymbol: "CGPOWER-EQ" },
+  { exchange: "NSE", tradingsymbol: "CHOLAFIN-EQ" },
   { exchange: "NSE", tradingsymbol: "CIPLA-EQ" },
   { exchange: "NSE", tradingsymbol: "COALINDIA-EQ" },
+  { exchange: "NSE", tradingsymbol: "COLPAL-EQ" },
+  { exchange: "NSE", tradingsymbol: "CONCOR-EQ" },
+  { exchange: "NSE", tradingsymbol: "COROMANDEL-EQ" },
+  // D
+  { exchange: "NSE", tradingsymbol: "DABUR-EQ" },
+  { exchange: "NSE", tradingsymbol: "DALBHARAT-EQ" },
+  { exchange: "NSE", tradingsymbol: "DEEPAKNTR-EQ" },
   { exchange: "NSE", tradingsymbol: "DIVISLAB-EQ" },
+  { exchange: "NSE", tradingsymbol: "DIXON-EQ" },
   { exchange: "NSE", tradingsymbol: "DRREDDY-EQ" },
+  // E
   { exchange: "NSE", tradingsymbol: "EICHERMOT-EQ" },
+  { exchange: "NSE", tradingsymbol: "ESCORTS-EQ" },
+  { exchange: "NSE", tradingsymbol: "EXIDEIND-EQ" },
+  // F
+  { exchange: "NSE", tradingsymbol: "FEDERALBNK-EQ" },
+  // G
+  { exchange: "NSE", tradingsymbol: "GAIL-EQ" },
+  { exchange: "NSE", tradingsymbol: "GLENMARK-EQ" },
+  { exchange: "NSE", tradingsymbol: "GODREJCP-EQ" },
+  { exchange: "NSE", tradingsymbol: "GODREJPROP-EQ" },
   { exchange: "NSE", tradingsymbol: "GRASIM-EQ" },
+  // H
   { exchange: "NSE", tradingsymbol: "HCLTECH-EQ" },
   { exchange: "NSE", tradingsymbol: "HDFCBANK-EQ" },
   { exchange: "NSE", tradingsymbol: "HDFCLIFE-EQ" },
   { exchange: "NSE", tradingsymbol: "HEROMOTOCO-EQ" },
   { exchange: "NSE", tradingsymbol: "HINDALCO-EQ" },
+  { exchange: "NSE", tradingsymbol: "HAL-EQ" },
+  { exchange: "NSE", tradingsymbol: "HINDPETRO-EQ" },
   { exchange: "NSE", tradingsymbol: "HINDUNILVR-EQ" },
+  // I
   { exchange: "NSE", tradingsymbol: "ICICIBANK-EQ" },
-  { exchange: "NSE", tradingsymbol: "ITC-EQ" },
+  { exchange: "NSE", tradingsymbol: "ICICIGI-EQ" },
+  { exchange: "NSE", tradingsymbol: "ICICIPRULI-EQ" },
+  { exchange: "NSE", tradingsymbol: "INDIANB-EQ" },
+  { exchange: "NSE", tradingsymbol: "IOC-EQ" },
+  { exchange: "NSE", tradingsymbol: "IGL-EQ" },
   { exchange: "NSE", tradingsymbol: "INDUSINDBK-EQ" },
+  { exchange: "NSE", tradingsymbol: "NAUKRI-EQ" },
   { exchange: "NSE", tradingsymbol: "INFY-EQ" },
+  { exchange: "NSE", tradingsymbol: "INDIGO-EQ" },
+  // J
   { exchange: "NSE", tradingsymbol: "JSWSTEEL-EQ" },
+  { exchange: "NSE", tradingsymbol: "JSWENERGY-EQ" },
+  // K
   { exchange: "NSE", tradingsymbol: "KOTAKBANK-EQ" },
+  // L
   { exchange: "NSE", tradingsymbol: "LT-EQ" },
+  { exchange: "NSE", tradingsymbol: "LICHSGFIN-EQ" },
+  { exchange: "NSE", tradingsymbol: "LTIM-EQ" },
+  { exchange: "NSE", tradingsymbol: "LUPIN-EQ" },
+  // M
   { exchange: "NSE", tradingsymbol: "M&M-EQ" },
+  { exchange: "NSE", tradingsymbol: "M&MFIN-EQ" },
+  { exchange: "NSE", tradingsymbol: "MARICO-EQ" },
   { exchange: "NSE", tradingsymbol: "MARUTI-EQ" },
+  { exchange: "NSE", tradingsymbol: "MAXHEALTH-EQ" },
+  // N
   { exchange: "NSE", tradingsymbol: "NESTLEIND-EQ" },
+  { exchange: "NSE", tradingsymbol: "NMDC-EQ" },
   { exchange: "NSE", tradingsymbol: "NTPC-EQ" },
+  // O
   { exchange: "NSE", tradingsymbol: "ONGC-EQ" },
+  // P
+  { exchange: "NSE", tradingsymbol: "PAGEIND-EQ" },
+  { exchange: "NSE", tradingsymbol: "PETRONET-EQ" },
+  { exchange: "NSE", tradingsymbol: "PIDILITIND-EQ" },
+  { exchange: "NSE", tradingsymbol: "PIIND-EQ" },
+  { exchange: "NSE", tradingsymbol: "PFC-EQ" },
   { exchange: "NSE", tradingsymbol: "POWERGRID-EQ" },
+  // R
+  { exchange: "NSE", tradingsymbol: "RECLTD-EQ" },
   { exchange: "NSE", tradingsymbol: "RELIANCE-EQ" },
+  // S
   { exchange: "NSE", tradingsymbol: "SBILIFE-EQ" },
+  { exchange: "NSE", tradingsymbol: "SHREECEM-EQ" },
+  { exchange: "NSE", tradingsymbol: "SIEMENS-EQ" },
   { exchange: "NSE", tradingsymbol: "SBIN-EQ" },
   { exchange: "NSE", tradingsymbol: "SUNPHARMA-EQ" },
-  { exchange: "NSE", tradingsymbol: "TCS-EQ" },
+  // T
+  { exchange: "NSE", tradingsymbol: "TATACHEM-EQ" },
   { exchange: "NSE", tradingsymbol: "TATACONSUM-EQ" },
+  { exchange: "NSE", tradingsymbol: "TATAELXSI-EQ" },
   { exchange: "NSE", tradingsymbol: "TATAMOTORS-EQ" },
+  { exchange: "NSE", tradingsymbol: "TATAPOWER-EQ" },
   { exchange: "NSE", tradingsymbol: "TATASTEEL-EQ" },
+  { exchange: "NSE", tradingsymbol: "TCS-EQ" },
   { exchange: "NSE", tradingsymbol: "TECHM-EQ" },
   { exchange: "NSE", tradingsymbol: "TITAN-EQ" },
-  { exchange: "NSE", tradingsymbol: "ULTRACEMCO-EQ" },
+  { exchange: "NSE", tradingsymbol: "TORNTPHARM-EQ" },
+  // U
   { exchange: "NSE", tradingsymbol: "UPL-EQ" },
+  // V
+  { exchange: "NSE", tradingsymbol: "VEDL-EQ" },
+  { exchange: "NSE", tradingsymbol: "VOLTAS-EQ" },
+  // W-Z
   { exchange: "NSE", tradingsymbol: "WIPRO-EQ" },
+  { exchange: "NSE", tradingsymbol: "ZOMATO-EQ" },
+  { exchange: "NSE", tradingsymbol: "ZEEL-EQ" },
 ];
 async function writeHistory(list) {
   await fs.writeFile(RESULTS_FILE, JSON.stringify(list, null, 2), "utf-8");
@@ -341,13 +433,14 @@ async function fetchCandles(exchange, tradingsymbol, interval, preset) {
 
 // ------------------------------------------------------------
 // Indicator
-function addIndicator(candles, indicator, window = 20) {
+function addIndicator(candles, indicator, window = 20, stdDev = 2) {
   const ind = String(indicator || "VWAP").toUpperCase();
   const closes = candles.map((c) => c.close);
   const volumes = candles.map((c) => c.volume);
   let out = new Array(candles.length).fill(null);
 
   const w = Math.max(2, Math.min(200, Number(window || 20)));
+  const numDev = Math.max(0.1, Number(stdDev || 2));
 
   if (ind === "VWAP") {
     let cumPV = 0,
@@ -358,12 +451,21 @@ function addIndicator(candles, indicator, window = 20) {
       cumVol += volumes[i];
       out[i] = cumVol === 0 ? null : cumPV / cumVol;
     }
-  } else if (ind === "SMA") {
+  } else if (ind === "SMA" || ind === "BOLLINGER_BAND") {
     for (let i = 0; i < candles.length; i++) {
       if (i + 1 < w) continue;
       let sum = 0;
       for (let j = i - w + 1; j <= i; j++) sum += closes[j];
       out[i] = sum / w;
+    }
+  } else if (ind === "BOLLINGER_UPPER" || ind === "BOLLINGER_LOWER") {
+    for (let i = 0; i < candles.length; i++) {
+      if (i + 1 < w) continue;
+      const slice = closes.slice(i - w + 1, i + 1);
+      const sma = slice.reduce((s, v) => s + v, 0) / w;
+      const variance = slice.reduce((s, v) => s + Math.pow(v - sma, 2), 0) / w;
+      const sd = Math.sqrt(variance);
+      out[i] = ind === "BOLLINGER_UPPER" ? sma + numDev * sd : sma - numDev * sd;
     }
   } else if (ind === "EMA") {
     const alpha = 2 / (w + 1);
@@ -448,7 +550,6 @@ function scanThreeCandlePattern(candlesWithInd, opts = {}) {
         ...found,
         candle2High: refHigh,
       });
-      break; // stop after first match per symbol
     }
   }
 
@@ -495,7 +596,17 @@ app.get("/api/candles", async (req, res) => {
 // API: screener (bulk scan up to 10)
 // API: screener (with Plotly chart integration)
 app.post("/api/screener", async (req, res) => {
-  console.log("🟢 [/api/screener] Request started");
+  console.log("🟢 [/api/screener] SSE Request started");
+
+  // Set up SSE headers
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const sendEvent = (type, data) => {
+    res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+  };
 
   const body = req.body || {};
 
@@ -506,50 +617,34 @@ app.post("/api/screener", async (req, res) => {
 
   const candle1Side = String(body.candle1Side || "BELOW").toUpperCase();
   const breakoutMode = String(body.breakoutMode || "CLOSE").toUpperCase();
+  const stdDev = Math.max(0.1, Number(body.stdDev || 2));
 
   const confirmWithLTP = body.confirmWithLTP !== false;
   const stocks = Array.isArray(body.stocks) && body.stocks.length ? body.stocks : DEFAULT_STOCKS;
 
   const interval = mapInterval(timeframe);
+  const totalStocks = stocks.length;
 
   console.log("⚙️ Params:", {
-    preset,
-    timeframe,
-    interval,
-    indicator,
-    window,
-    candle1Side,
-    breakoutMode,
-    confirmWithLTP,
-    stocks: stocks.length,
+    preset, timeframe, interval, indicator, window,
+    candle1Side, breakoutMode, confirmWithLTP, stocks: totalStocks,
   });
+
+  sendEvent("progress", { step: "init", message: `Starting scan for ${totalStocks} stocks...`, current: 0, total: totalStocks });
 
   function parseAngelError(e) {
     const msg = String(e?.message || e || "");
-    // Try to pull JSON from "... failed: { ... }"
     const idx = msg.indexOf("{");
     if (idx >= 0) {
       try {
         const obj = JSON.parse(msg.slice(idx));
-        return {
-          code: obj?.errorcode,
-          apiMessage: obj?.message,
-          raw: obj,
-          msg,
-        };
+        return { code: obj?.errorcode, apiMessage: obj?.message, raw: obj, msg };
       } catch (_) {}
     }
-    // Fallback: if it’s an axios-like error
     const resp = e?.response?.data;
-    return {
-      code: resp?.errorcode,
-      apiMessage: resp?.message,
-      raw: resp,
-      msg,
-    };
+    return { code: resp?.errorcode, apiMessage: resp?.message, raw: resp, msg };
   }
 
-  // ---------- helper: retry wrapper ----------
   const fetchCandlesWithRetry = async (exchange, tradingsymbol, interval, preset, maxTry = 3) => {
     let lastError;
     for (let i = 1; i <= maxTry; i++) {
@@ -558,17 +653,10 @@ app.post("/api/screener", async (req, res) => {
       } catch (e) {
         lastError = e;
         const info = parseAngelError(e);
-
         console.warn(`⚠️ Candle fetch failed [${i}/${maxTry}]`, {
-          symbol: tradingsymbol,
-          exchange,
-          code: info.code,
-          message: info.apiMessage || info.msg,
+          symbol: tradingsymbol, exchange, code: info.code, message: info.apiMessage || info.msg,
         });
-
-        // Retry if AB1004 (even when thrown as string)
         if (info.code !== "AB1004") break;
-
         const wait = 600 * Math.pow(2, i - 1);
         await new Promise((r) => setTimeout(r, wait));
       }
@@ -576,19 +664,37 @@ app.post("/api/screener", async (req, res) => {
     throw lastError;
   };
 
+  // Check if client disconnected
+  let clientDisconnected = false;
+  let scanFinished = false;
+  req.on("close", () => {
+    if (!scanFinished) {
+      clientDisconnected = true;
+      console.log("Client disconnected, aborting scan");
+    }
+  });
+
   try {
     const results = [];
     const ltpReq = { NSE: [], BSE: [], NFO: [], MCX: [] };
+    let matchesSoFar = 0;
 
-    console.log("🔁 Processing stocks…");
+    for (let idx = 0; idx < stocks.length; idx++) {
+      if (clientDisconnected) return;
 
-    for (const s of stocks.slice(0, 10)) {
+      const s = stocks[idx];
       const exchange = String(s.exchange || "NSE").toUpperCase();
       const tradingsymbol = String(s.tradingsymbol || "").toUpperCase();
-
       if (!tradingsymbol) continue;
 
-      console.log(`📊 ${exchange}:${tradingsymbol} → fetching candles`);
+      // Send progress: fetching candles
+      sendEvent("progress", {
+        step: "fetch",
+        message: `Fetching ${tradingsymbol}`,
+        current: idx + 1,
+        total: totalStocks,
+        matches: matchesSoFar,
+      });
 
       try {
         const { candles, symboltoken } = await fetchCandlesWithRetry(exchange, tradingsymbol, interval, preset);
@@ -596,79 +702,58 @@ app.post("/api/screener", async (req, res) => {
         console.log(`🕯️ ${tradingsymbol} candles: ${candles?.length ?? 0}`);
 
         if (!candles || candles.length < 10) {
-          results.push({
-            exchange,
-            tradingsymbol,
-            symboltoken,
-            match: false,
-            reason: "Not enough candles",
-          });
+          results.push({ exchange, tradingsymbol, symboltoken, match: false, reason: "Not enough candles" });
           continue;
         }
 
-        const withInd = addIndicator(candles, indicator, window);
-        const hits = scanThreeCandlePattern(withInd, {
-          candle1Side,
-          breakoutMode,
+        // Send progress: calculating pattern
+        sendEvent("progress", {
+          step: "calculate",
+          message: `Analyzing ${tradingsymbol}`,
+          current: idx + 1,
+          total: totalStocks,
+          matches: matchesSoFar,
         });
+
+        const withInd = addIndicator(candles, indicator, window, stdDev);
+        const hits = scanThreeCandlePattern(withInd, { candle1Side, breakoutMode });
 
         if (hits.length) {
+          matchesSoFar++;
           console.log(`✅ Pattern HIT → ${tradingsymbol}`);
+          if (confirmWithLTP && ltpReq[exchange]) ltpReq[exchange].push(String(symboltoken));
+          results.push({ exchange, tradingsymbol, symboltoken, match: true, hits, lastCandle: withInd[withInd.length - 1], candles: withInd });
 
-          if (confirmWithLTP && ltpReq[exchange]) {
-            ltpReq[exchange].push(String(symboltoken));
-          }
-
-          results.push({
-            exchange,
-            tradingsymbol,
-            symboltoken,
-            match: true,
-            hit: hits[0],
-            lastCandle: withInd[withInd.length - 1],
-            candles: withInd,
+          sendEvent("match", {
+            message: `Pattern found in ${tradingsymbol}`,
+            symbol: tradingsymbol,
+            current: idx + 1,
+            total: totalStocks,
+            matches: matchesSoFar,
           });
         } else {
-          console.log(`➖ No pattern → ${tradingsymbol}`);
-          results.push({
-            exchange,
-            tradingsymbol,
-            symboltoken,
-            match: false,
-          });
+          results.push({ exchange, tradingsymbol, symboltoken, match: false });
         }
       } catch (e) {
-        const resp = e?.response?.data;
         const info = parseAngelError(e);
-
-        console.error(`🔥 ${tradingsymbol} failed`, {
-          exchange,
-          code: info.code,
-          message: info.apiMessage || info.msg,
-        });
-
-        results.push({
-          exchange,
-          tradingsymbol,
-          match: false,
-          error: info.code ? `${info.code}: ${info.apiMessage || info.msg}` : info.msg,
-        });
+        console.error(`🔥 ${tradingsymbol} failed`, { exchange, code: info.code, message: info.apiMessage || info.msg });
+        results.push({ exchange, tradingsymbol, match: false, error: info.code ? `${info.code}: ${info.apiMessage || info.msg}` : info.msg });
       }
 
-      // light throttle (prevents AB1004 bursts)
       await new Promise((r) => setTimeout(r, 250));
     }
+
+    if (clientDisconnected) return;
 
     // ---------- LTP BULK ----------
     let ltpMap = {};
     if (confirmWithLTP) {
       const exchangeTokens = Object.fromEntries(Object.entries(ltpReq).filter(([, arr]) => arr.length));
 
-      console.log("📡 LTP request:", exchangeTokens);
-
       if (Object.keys(exchangeTokens).length) {
-        const fetched = await getLTPBulk(exchangeTokens);
+        sendEvent("progress", { step: "ltp", message: "Fetching live prices...", current: totalStocks, total: totalStocks, matches: matchesSoFar });
 
+        const fetched = await getLTPBulk(exchangeTokens);
         for (const row of fetched) {
           ltpMap[`${row.exchange}:${row.symbolToken}`] = Number(row.ltp);
         }
@@ -678,66 +763,49 @@ app.post("/api/screener", async (req, res) => {
     // ---------- Attach LTP ----------
     for (const r of results) {
       if (!r.match || !confirmWithLTP) continue;
-
       const key = `${r.exchange}:${r.symboltoken}`;
       const ltp = ltpMap[key];
-
       r.ltp = Number.isFinite(ltp) ? ltp : null;
-
-      const candle2High = r.hit?.candle2High;
+      const candle2High = r.hits?.[0]?.candle2High;
       r.liveBreakAboveCandle2High = Number.isFinite(candle2High) && Number.isFinite(ltp) ? ltp > candle2High : null;
-
-      console.log(`📈 ${r.tradingsymbol} LTP: ${r.ltp} | Break: ${r.liveBreakAboveCandle2High}`);
     }
 
     // ---------- Save history ----------
     const matched = results.filter((r) => r.match);
+    const scanParams = { preset, timeframe, interval, indicator, window, candle1Side, breakoutMode, confirmWithLTP };
 
-    console.log(`💾 Saving run | Matches: ${matched.length}`);
+    // Only persist to file if there are matches
+    if (matched.length > 0) {
+      sendEvent("progress", { step: "saving", message: `Saving ${matched.length} matches to history...`, current: totalStocks, total: totalStocks, matches: matched.length });
 
-    await appendHistory({
-      id: `${Date.now()}`,
-      ts: new Date().toISOString(),
-      params: {
-        preset,
-        timeframe,
-        interval,
-        indicator,
-        window,
-        candle1Side,
-        breakoutMode,
-        confirmWithLTP,
-      },
-      results: matched.map((r) => ({
-        exchange: r.exchange,
-        tradingsymbol: r.tradingsymbol,
-        symboltoken: r.symboltoken,
-        ltp: r.ltp ?? null,
-        liveBreakAboveCandle2High: r.liveBreakAboveCandle2High ?? null,
-        hit: r.hit ?? null,
-        candles: r.candles?.slice(-300) ?? [],
-      })),
-    });
+      await appendHistory({
+        id: `${Date.now()}`,
+        ts: new Date().toISOString(),
+        params: scanParams,
+        results: matched.map((r) => ({
+          exchange: r.exchange, tradingsymbol: r.tradingsymbol, symboltoken: r.symboltoken,
+          ltp: r.ltp ?? null, liveBreakAboveCandle2High: r.liveBreakAboveCandle2High ?? null,
+          hits: r.hits ?? [], candles: r.candles?.slice(-300) ?? [],
+        })),
+      });
+    }
 
     console.log("✅ [/api/screener] Completed");
 
-    res.json({
+    // Send final result
+    sendEvent("done", {
       ok: true,
-      params: {
-        preset,
-        timeframe,
-        interval,
-        indicator,
-        window,
-        candle1Side,
-        breakoutMode,
-        confirmWithLTP,
-      },
+      params: scanParams,
       results: matched,
     });
+
+    scanFinished = true;
+    res.end();
   } catch (e) {
     console.error("🔥 [/api/screener] Fatal:", e);
-    res.status(500).json({ ok: false, error: String(e.message || e) });
+    sendEvent("error", { message: String(e.message || e) });
+    scanFinished = true;
+    res.end();
   }
 });
 
@@ -759,6 +827,15 @@ app.get("/api/history/:id", async (req, res) => {
   const item = list.find((x) => String(x.id) === String(req.params.id));
   if (!item) return res.status(404).json({ ok: false, error: "Not found" });
   res.json({ ok: true, item });
+});
+
+// API: delete history item by id
+app.delete("/api/history/:id", async (req, res) => {
+  const list = await readHistory();
+  const filtered = list.filter((x) => String(x.id) !== String(req.params.id));
+  if (filtered.length === list.length) return res.status(404).json({ ok: false, error: "Not found" });
+  await writeHistory(filtered);
+  res.json({ ok: true });
 });
 
 app.listen(PORT, () => console.log(`✅ http://localhost:${PORT}`));

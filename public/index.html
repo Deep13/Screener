@@ -1,849 +1,1324 @@
 <!doctype html>
-<html>
-
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Angel Screener</title>
+  <title>3-Candle Screener</title>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-
   <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    /* ── Dark theme (default) ───────────────────── */
+    :root {
+      --bg: #0f1117;
+      --surface: #181b24;
+      --surface2: #1e222d;
+      --border: #2a2e3a;
+      --text: #e8eaed;
+      --text-muted: #9aa0ac;
+      --accent: #2962ff;
+      --accent-hover: #1e53e4;
+      --green: #26a69a;
+      --red: #ef5350;
+      --amber: #ffb74d;
+      --plot-bg: #181b24;
+      --plot-grid: #2a2e3a;
+      --plot-font: #e8eaed;
+      --candle-up: #26a69a;
+      --candle-down: #ef5350;
+      --logo-color: #fff;
+      --resize-handle: #3a3f4b;
+    }
+
+    /* ── Light theme ────────────────────────────── */
+    body.light {
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --surface2: #f5f6f8;
+      --border: #d5d8dd;
+      --text: #1a1a2e;
+      --text-muted: #5f6672;
+      --accent: #2962ff;
+      --accent-hover: #1e53e4;
+      --green: #0d9f6e;
+      --red: #dc3545;
+      --amber: #e65100;
+      --plot-bg: #ffffff;
+      --plot-grid: #e0e3e8;
+      --plot-font: #1a1a2e;
+      --candle-up: #0d9f6e;
+      --candle-down: #dc3545;
+      --logo-color: #1a1a2e;
+      --resize-handle: #c8ccd2;
+    }
+
     body {
-      font-family: system-ui, Arial;
-      margin: 20px;
-    }
-
-    .row {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      height: 100vh;
       display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      align-items: end;
+      flex-direction: column;
+      overflow: hidden;
     }
 
-    label {
-      display: block;
+    /* ── Top bar ─────────────────────────────────── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .topbar .logo {
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -0.3px;
+      margin-right: 12px;
+      white-space: nowrap;
+      color: var(--logo-color);
+    }
+
+    .topbar .logo span { color: var(--accent); }
+
+    .ctrl-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .ctrl-group label {
       font-size: 12px;
-      opacity: 0.8;
-      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-right: 2px;
     }
 
-    select,
-    input,
-    button {
-      padding: 10px;
+    select, input[type="number"] {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 10px;
       font-size: 14px;
+      outline: none;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 16px;
+    select option { background: var(--surface); color: var(--text); }
+    select:focus, input:focus { border-color: var(--accent); }
+    input[type="number"] { width: 64px; }
+
+    .divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      margin: 0 6px;
     }
 
-    th,
-    td {
-      border: 1px solid #ddd;
-      padding: 10px;
-      text-align: left;
+    .action-btn {
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 7px 22px;
       font-size: 14px;
-    }
-
-    th {
-      background: #f6f6f6;
-    }
-
-    .muted {
-      opacity: 0.7;
-    }
-
-    .ok {
-      color: #0a7;
       font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.3px;
+      min-width: 80px;
+    }
+
+    .action-btn.run { background: var(--accent); }
+    .action-btn.run:hover { background: var(--accent-hover); }
+    .action-btn.stop { background: var(--red); }
+    .action-btn.stop:hover { background: #c62828; }
+
+    .theme-toggle {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 5px 10px;
+      font-size: 16px;
+      cursor: pointer;
+      line-height: 1;
+      margin-left: 4px;
+    }
+
+    .theme-toggle:hover { border-color: var(--text-muted); }
+
+    #status {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    #status .match-count {
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    /* ── Main layout ─────────────────────────────── */
+    .main {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+
+    /* ── Left: chart area ────────────────────────── */
+    .chart-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
     }
 
     .tabs {
       display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-bottom: 12px;
+      gap: 2px;
+      padding: 6px 12px 0;
+      background: var(--surface);
+      overflow-x: auto;
+      flex-shrink: 0;
     }
+
+    .tabs::-webkit-scrollbar { height: 3px; }
+    .tabs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
     .tab-btn {
-      border: 1px solid #ddd;
-      background: #fff;
-      padding: 8px 12px;
-      border-radius: 10px;
+      background: transparent;
+      color: var(--text-muted);
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 8px 16px;
+      font-size: 14px;
       cursor: pointer;
-      font-size: 13px;
+      white-space: nowrap;
+      transition: all 0.15s;
     }
 
+    .tab-btn:hover { color: var(--text); }
+
     .tab-btn.active {
-      border-color: #111;
+      color: var(--text);
+      border-bottom-color: var(--accent);
       font-weight: 600;
     }
 
     .tab-panel {
       display: none;
-      border: 1px solid #eee;
-      border-radius: 12px;
-      padding: 10px;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      overflow-y: auto;
     }
 
-    .tab-panel.active {
-      display: block;
-    }
+    .tab-panel.active { display: flex; }
 
     .chart-box {
-      width: 100%;
-      height: 420px;
+      flex: 1;
+      min-height: 350px;
     }
 
     .panel-header {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 6px;
+      padding: 4px 8px;
+      flex-shrink: 0;
     }
 
     .btn-fullscreen {
-      padding: 5px 12px;
-      font-size: 12px;
-      background: #f0f0f0;
-      border: 1px solid #ccc;
-      border-radius: 6px;
+      background: var(--surface2);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 12px;
+      font-size: 13px;
       cursor: pointer;
     }
 
-    .btn-fullscreen:hover {
-      background: #e0e0e0;
+    .btn-fullscreen:hover { color: var(--text); border-color: var(--text-muted); }
+
+    /* ── Resizable wrapper for tables ────────────── */
+    .resizable-wrap {
+      overflow: auto;
+      resize: vertical;
+      flex-shrink: 0;
+      border-top: 3px solid var(--resize-handle);
+      position: relative;
+      cursor: default;
+    }
+
+    .resizable-wrap::after {
+      content: "\u2502\u2502\u2502";
+      position: absolute;
+      top: -2px;
+      left: 50%;
+      transform: translateX(-50%) rotate(90deg);
+      font-size: 8px;
+      color: var(--text-muted);
+      pointer-events: none;
+      letter-spacing: 1px;
+    }
+
+    .resizable-wrap::-webkit-scrollbar { width: 5px; }
+    .resizable-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* ── Candle detail table ─────────────────────── */
+    .candle-detail-wrap {
+      min-height: 60px;
+      max-height: 50vh;
+      height: 140px;
     }
 
     .candle-detail-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 12px;
       font-size: 13px;
     }
 
     .candle-detail-table th {
-      background: #f0f4ff;
-      padding: 7px 10px;
-      border: 1px solid #d0d8f0;
+      background: var(--surface2);
+      color: var(--text-muted);
+      padding: 6px 10px;
+      border: 1px solid var(--border);
       text-align: center;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 0.4px;
+      position: sticky;
+      top: 0;
+      z-index: 1;
     }
 
     .candle-detail-table td {
-      padding: 6px 10px;
-      border: 1px solid #e0e0e0;
+      padding: 5px 10px;
+      border: 1px solid var(--border);
       text-align: center;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
     }
 
-    .candle-detail-table tr.c1-row td { background: #fff8e1; }
-    .candle-detail-table tr.c2-row td { background: #e8f5e9; }
-    .candle-detail-table tr.c3-row td { background: #e3f2fd; }
+    .candle-detail-table tr.c1-row td { background: rgba(255,183,77,0.1); }
+    .candle-detail-table tr.c2-row td { background: rgba(38,166,154,0.1); }
+    .candle-detail-table tr.c3-row td { background: rgba(41,98,255,0.1); }
 
-    /* Fullscreen overlay */
+    /* ── Results table (below tabs) ──────────────── */
+    .results-wrap {
+      min-height: 60px;
+      max-height: 50vh;
+      height: 160px;
+    }
+
+    #table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    #table th {
+      background: var(--surface2);
+      color: var(--text-muted);
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      text-align: left;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 0.4px;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    #table td {
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .ok { color: var(--green); font-weight: 600; }
+
+    /* ── Right sidebar: history ───────────────────── */
+    .sidebar {
+      width: 280px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: width 0.2s;
+    }
+
+    .sidebar.collapsed { width: 36px; }
+    .sidebar.collapsed .sidebar-content { display: none; }
+    .sidebar.collapsed .sidebar-header span { display: none; }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .sidebar-header span {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+    }
+
+    .sidebar-toggle {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 2px 4px;
+    }
+
+    .sidebar-toggle:hover { color: var(--text); }
+    .sidebar-btn {
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px;
+    }
+    .sidebar-btn:hover { color: var(--text); background: var(--surface2); }
+    .delete-btn {
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 13px; padding: 1px 4px; border-radius: 3px; opacity: 0.5;
+    }
+    .delete-btn:hover { color: var(--red); opacity: 1; }
+    #historyTable .ephemeral td { opacity: 0.6; font-style: italic; }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .sidebar-content::-webkit-scrollbar { width: 4px; }
+    .sidebar-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    #historyTable {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    #historyTable th {
+      background: var(--surface2);
+      color: var(--text-muted);
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      font-weight: 600;
+      font-size: 12px;
+      position: sticky;
+      top: 0;
+    }
+
+    #historyTable td {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    #historyTable tbody tr:hover td { background: var(--surface2); }
+    #historyTable tbody tr.active-row td { background: var(--accent); color: #fff; }
+
+    /* ── Fullscreen overlay ──────────────────────── */
     #fullscreen-overlay {
       display: none;
       position: fixed;
       inset: 0;
-      background: #fff;
+      background: var(--bg);
       z-index: 9999;
-      padding: 16px;
+      padding: 12px;
       box-sizing: border-box;
     }
 
     #fullscreen-overlay.active { display: flex; flex-direction: column; }
-
-    #fullscreen-chart {
-      flex: 1;
-      width: 100%;
-    }
+    #fullscreen-chart { flex: 1; width: 100%; }
 
     #fullscreen-close {
       align-self: flex-end;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       padding: 6px 16px;
       font-size: 14px;
       cursor: pointer;
-      background: #333;
-      color: #fff;
-      border: none;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+
+    #fullscreen-close:hover { border-color: var(--text-muted); }
+
+    /* ── Center status / empty state ─────────────── */
+    .center-msg {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 16px;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .center-msg .icon { font-size: 36px; opacity: 0.35; }
+
+    .center-msg .scan-round {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .center-msg .scan-detail {
+      font-size: 14px;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .center-msg .last-result {
+      font-size: 13px;
+      color: var(--text);
+      background: var(--surface2);
+      border: 1px solid var(--border);
       border-radius: 6px;
+      padding: 10px 20px;
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    .center-msg .last-result .count { color: var(--green); font-weight: 700; font-size: 18px; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .scanning-pulse { animation: pulse 1.5s ease-in-out infinite; }
+
+    /* ── Progress bar ────────────────────────────── */
+    .progress-wrap {
+      height: 3px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    @keyframes indeterminate {
+      0% { left: -30%; width: 30%; }
+      100% { left: 100%; width: 30%; }
+    }
+
+    .progress-bar.indeterminate {
+      position: relative;
+      width: 100%;
+      background: transparent;
+    }
+
+    .progress-bar.indeterminate::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -30%;
+      height: 100%;
+      width: 30%;
+      background: var(--accent);
+      animation: indeterminate 1.2s linear infinite;
     }
   </style>
 </head>
-
 <body>
+
   <!-- Fullscreen overlay -->
   <div id="fullscreen-overlay">
-    <button id="fullscreen-close" onclick="closeFullscreen()">✕ Close Fullscreen</button>
+    <button id="fullscreen-close" onclick="closeFullscreen()">Close</button>
     <div id="fullscreen-chart"></div>
   </div>
 
-  <div style="display:flex;justify-content: space-between;">
-    <div style="flex:1">
-      <h2>3-Candle Screener</h2>
-      <h4>for stocks NIFTY 50</h4>
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="logo"><span>3C</span> Screener</div>
 
-      <div class="row">
-        <div>
-          <label>Preset</label>
-          <select id="preset">
-            <option value="today">today</option>
-            <option value="1h">1h</option>
-            <option value="2h">2h</option>
-            <option value="4h">4h</option>
-            <option value="2d">2d</option>
-          </select>
-        </div>
-
-        <div>
-          <label>Timeframe</label>
-          <select id="timeframe">
-            <option value="1m">1m</option>
-            <option value="5m" selected>5m</option>
-            <option value="15m">15m</option>
-            <option value="30m">30m</option>
-            <option value="1h">1h</option>
-            <option value="1d">1d</option>
-          </select>
-        </div>
-
-        <div>
-          <label>Indicator</label>
-          <select id="indicator" onchange="onIndicatorChange()">
-             <option value="SMA">SMA</option>
-            <option value="VWAP" selected>VWAP</option>
-            <option value="EMA">EMA</option>
-            <option value="CLOSE">CLOSE</option>
-            <option value="BOLLINGER_BAND">Bollinger Band</option>
-            <option value="BOLLINGER_UPPER">Bollinger Upper</option>
-            <option value="BOLLINGER_LOWER">Bollinger Lower</option>
-          </select>
-        </div>
-
-        <div>
-          <label>Window</label>
-          <input id="window" type="number" min="2" max="200" value="20" />
-        </div>
-
-        <div id="stdDevContainer" style="display:none;">
-          <label>Std Deviation</label>
-          <input id="stdDev" type="number" min="0.1" max="5" step="0.1" value="2" style="width:80px;" />
-        </div>
-
-        <div>
-          <label>Candle-1 side</label>
-          <select id="candle1Side">
-            <option value="BELOW" selected>BELOW</option>
-            <option value="ABOVE">ABOVE</option>
-          </select>
-        </div>
-
-        <div>
-          <label>Breakout mode</label>
-          <select id="breakoutMode">
-            <option value="CLOSE" selected>CLOSE &gt; Candle2High</option>
-            <option value="HIGH">HIGH &gt; Candle2High</option>
-          </select>
-        </div>
-
-        <button id="run">Run Screener</button>
-      </div>
-      <!-- Add Plotly Candlestick Chart container -->
-      <div id="charts" style="margin-top: 20px">
-        <div id="tabs" class="tabs"></div>
-        <div id="tab-panels"></div>
-      </div>
-
-      <div id="status" class="muted" style="margin-top: 12px"></div>
-
-      <table id="table" style="display: none">
-        <thead>
-          <tr>
-            <th>Symbol</th>
-            <th>Exchange</th>
-            <th>Candle-2 High</th>
-            <th>Candle-3 Time</th>
-            <th>LTP</th>
-            <th>Live Break?</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <div class="ctrl-group">
+      <label>Preset</label>
+      <select id="preset">
+        <option value="today">Today</option>
+        <option value="1h">1H</option>
+        <option value="2h">2H</option>
+        <option value="4h">4H</option>
+        <option value="2d">2D</option>
+      </select>
     </div>
-    <div style="width: 500px;height: 90vh;overflow-y: scroll;">
-      <table id="historyTable">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Preset</th>
-            <th>TF</th>
-            <th>Ind</th>
-            <th>Matches</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
+
+    <div class="ctrl-group">
+      <label>TF</label>
+      <select id="timeframe">
+        <option value="1m">1m</option>
+        <option value="5m" selected>5m</option>
+        <option value="15m">15m</option>
+        <option value="30m">30m</option>
+        <option value="1h">1h</option>
+        <option value="1d">1d</option>
+      </select>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="ctrl-group">
+      <label>Indicator</label>
+      <select id="indicator" onchange="onIndicatorChange()">
+        <option value="SMA">SMA</option>
+        <option value="VWAP" selected>VWAP</option>
+        <option value="EMA">EMA</option>
+        <option value="CLOSE">CLOSE</option>
+        <option value="BOLLINGER_BAND">BB Mid</option>
+        <option value="BOLLINGER_UPPER">BB Upper</option>
+        <option value="BOLLINGER_LOWER">BB Lower</option>
+      </select>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Win</label>
+      <input id="window" type="number" min="2" max="200" value="20" />
+    </div>
+
+    <div class="ctrl-group" id="stdDevContainer" style="display:none;">
+      <label>&sigma;</label>
+      <input id="stdDev" type="number" min="0.1" max="5" step="0.1" value="2" />
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="ctrl-group">
+      <label>C1 Side</label>
+      <select id="candle1Side">
+        <option value="BELOW" selected>Below</option>
+        <option value="ABOVE">Above</option>
+      </select>
+    </div>
+
+    <div class="ctrl-group">
+      <label>Breakout</label>
+      <select id="breakoutMode">
+        <option value="CLOSE" selected>Close</option>
+        <option value="HIGH">High</option>
+      </select>
+    </div>
+
+    <button class="action-btn run" id="actionBtn">Run</button>
+
+    <div id="status"></div>
+
+    <button class="theme-toggle" id="themeToggle" title="Toggle light / dark mode">&#9789;</button>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap"><div class="progress-bar" id="progress"></div></div>
+
+  <!-- Main layout -->
+  <div class="main">
+    <!-- Chart area -->
+    <div class="chart-area">
+      <div id="tabs" class="tabs"></div>
+      <div id="tab-panels" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+        <!-- Center message area (idle / scanning / chart) -->
+        <div class="center-msg" id="centerMsg">
+          <div class="icon">&#9680;</div>
+          <div>Run the screener to find 3-candle breakout patterns</div>
+          <div style="font-size:13px;">~130 stocks scanned per round</div>
+        </div>
+      </div>
+
+      <!-- Results table -->
+      <div class="resizable-wrap results-wrap" id="resultsWrap" style="display:none;">
+        <table id="table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Exchange</th>
+              <th>C2 High</th>
+              <th>C3 Time</th>
+              <th>LTP</th>
+              <th>Live Break</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Right sidebar: history -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span>History</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="sidebar-btn" id="refreshHistory" title="Refresh (clear ephemeral)">&#8635;</button>
+          <button class="sidebar-toggle" id="sidebarToggle" title="Toggle sidebar">&#9776;</button>
+        </div>
+      </div>
+      <div class="sidebar-content">
+        <table id="historyTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>TF</th>
+              <th>Ind</th>
+              <th>Hits</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <script>
     const $ = (id) => document.getElementById(id);
 
-    // Shared state: set in getStockData(), read in renderChartTable()
     let serverIndicator = "SMA";
-    let lastRows = []; // cache last screener results for live re-render
+    let lastRows = [];
+    let isDark = true;
+
+    // ── Scanning state ──
+    let scanning = false;
+    let scanRound = 0;
+    let totalMatches = 0;
+    let abortController = null;
+    let ephemeralHistory = []; // 0-match entries, not saved to server
 
     function isBollingerIndicator(val) {
       return ["BOLLINGER_BAND", "BOLLINGER_UPPER", "BOLLINGER_LOWER"].includes(val);
     }
 
     function onIndicatorChange() {
-      const val = $("indicator").value;
-      $("stdDevContainer").style.display = isBollingerIndicator(val) ? "" : "none";
+      $("stdDevContainer").style.display = isBollingerIndicator($("indicator").value) ? "" : "none";
     }
 
-    // Run once on load in case of page restore
     onIndicatorChange();
-function fmtTime(t) {
-  // supports ISO string OR epoch ms string/number
-  const n = typeof t === "string" && /^\d+$/.test(t) ? Number(t) : t;
-  return new Date(n).toLocaleString();
-}
-    $("run").addEventListener("click", async () => {
-      getStockData();
-    });
-function parseIST(ts) {
-  // ts like: "2026-02-09 12:10" OR "2026-02-09 12:10:00"
-  // Convert to ISO with IST offset so it is unambiguous.
-  if (typeof ts === "string" && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(ts)) {
-    const iso = ts.replace(" ", "T");
-    return new Date(iso + ":00+05:30"); // add seconds + IST offset
-  }
-  return new Date(ts);
-}
-    async function getStockData() {
-      $("status").textContent = "Running...";
-      $("table").style.display = "none";
-      const tbody = document.querySelector("#table tbody");
-      tbody.innerHTML = "";
 
-      // Clear the previous chart
+    // ── Theme toggle ──
+    $("themeToggle").addEventListener("click", () => {
+      isDark = !isDark;
+      document.body.classList.toggle("light", !isDark);
+      $("themeToggle").innerHTML = isDark ? "&#9789;" : "&#9788;";
+      localStorage.setItem("theme", isDark ? "dark" : "light");
+      if (lastRows.length) renderChartTable(lastRows);
+    });
+
+    if (localStorage.getItem("theme") === "light") {
+      isDark = false;
+      document.body.classList.add("light");
+      $("themeToggle").innerHTML = "&#9788;";
+    }
+
+    // ── Plotly theme ──
+    function getPlotlyLayout() {
+      const s = getComputedStyle(document.body);
+      return {
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: s.getPropertyValue("--plot-bg").trim(),
+        font: { color: s.getPropertyValue("--plot-font").trim(), size: 13 },
+        xaxis: {
+          type: "date",
+          rangeslider: { visible: false },
+          gridcolor: s.getPropertyValue("--plot-grid").trim(),
+          linecolor: s.getPropertyValue("--plot-grid").trim(),
+          tickfont: { color: s.getPropertyValue("--plot-font").trim() },
+        },
+        yaxis: {
+          title: "Price",
+          gridcolor: s.getPropertyValue("--plot-grid").trim(),
+          linecolor: s.getPropertyValue("--plot-grid").trim(),
+          tickfont: { color: s.getPropertyValue("--plot-font").trim() },
+        },
+        legend: { orientation: "h", y: 1.08, font: { size: 12, color: s.getPropertyValue("--plot-font").trim() } },
+        margin: { t: 36, r: 12, b: 32, l: 52 },
+      };
+    }
+
+    function getCandleColors() {
+      const s = getComputedStyle(document.body);
+      return {
+        up: s.getPropertyValue("--candle-up").trim(),
+        down: s.getPropertyValue("--candle-down").trim(),
+      };
+    }
+
+    // Sidebar toggle
+    $("sidebarToggle").addEventListener("click", () => {
+      $("sidebar").classList.toggle("collapsed");
+      setTimeout(() => {
+        const activeChart = document.querySelector(".tab-panel.active .chart-box");
+        if (activeChart) Plotly.Plots.resize(activeChart);
+      }, 250);
+    });
+
+    function fmtTime(t) {
+      const n = typeof t === "string" && /^\d+$/.test(t) ? Number(t) : t;
+      return new Date(n).toLocaleString();
+    }
+
+    function parseIST(ts) {
+      if (typeof ts === "string" && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(ts)) {
+        return new Date(ts.replace(" ", "T") + ":00+05:30");
+      }
+      return new Date(ts);
+    }
+
+    function formatUTC(ts) {
+      const d = new Date(ts);
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    // ── Action button: Run / Stop ──
+    $("actionBtn").addEventListener("click", () => {
+      if (scanning) {
+        stopScanning();
+      } else {
+        startScanning();
+      }
+    });
+
+    function startScanning() {
+      scanning = true;
+      scanRound = 0;
+      totalMatches = 0;
+      $("actionBtn").textContent = "Stop";
+      $("actionBtn").className = "action-btn stop";
+
+      // Clear charts — they only appear on history click now
       $("tabs").innerHTML = "";
       $("tab-panels").innerHTML = "";
+      $("resultsWrap").style.display = "none";
+      document.querySelector("#table tbody").innerHTML = "";
 
-      const selectedIndicator = $("indicator").value;
-      serverIndicator = isBollingerIndicator(selectedIndicator) ? "SMA" : selectedIndicator;
-      const stdDev = parseFloat($("stdDev").value) || 2;
+      showScanningCenter("Starting...", "Preparing to scan stocks...", true);
+      scanLoop();
+    }
 
-      const payload = {
-        preset: $("preset").value,
-        timeframe: $("timeframe").value,
-        indicator: serverIndicator,
-        window: Number($("window").value),
-        candle1Side: $("candle1Side").value,
-        breakoutMode: $("breakoutMode").value,
-        confirmWithLTP: true,
-        // stocks: [...] // optional custom list
-      };
+    function stopScanning() {
+      scanning = false;
+      if (abortController) { abortController.abort(); abortController = null; }
+      $("actionBtn").textContent = "Run";
+      $("actionBtn").className = "action-btn run";
+      $("progress").className = "progress-bar";
+      $("progress").style.width = "0%";
+      $("status").innerHTML = `Stopped after <span class="match-count">${scanRound}</span> rounds | Total matches: <span class="match-count">${totalMatches}</span>`;
+    }
 
-      try {
-        const resp = await fetch("/api/screener", {
+    function showScanningCenter(message, detail, pulsing) {
+      // Only update center if no chart is being viewed
+      const hasActiveChart = document.querySelector(".tab-panel.active");
+      if (hasActiveChart) return;
+
+      const cm = $("centerMsg") || document.createElement("div");
+      cm.id = "centerMsg";
+      cm.className = "center-msg";
+
+      const pulseClass = pulsing ? "scanning-pulse" : "";
+      cm.innerHTML = `
+        <div class="icon ${pulseClass}">&#9881;</div>
+        <div class="scan-round">${message}</div>
+        <div class="scan-detail">${detail}</div>
+      `;
+
+      if (!$("centerMsg")) {
+        $("tab-panels").prepend(cm);
+      }
+    }
+
+    // Run one scan round using SSE stream from server
+    function runScanRound(payload) {
+      return new Promise((resolve, reject) => {
+        abortController = new AbortController();
+        const signal = abortController.signal;
+
+        fetch("/api/screener", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        });
-        const json = await resp.json();
+          signal,
+        }).then(async (resp) => {
+          const reader = resp.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let finalResult = null;
 
-        if (!json.ok) throw new Error(json.error || "Failed");
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-        const rows = json.results || [];
-        if (rows.length == 0) {
-          setTimeout(() => {
-            getStockData();
-          }, 2000);
-        }
-        fetchHistoryAndRender();
-        $("status").textContent = `Matches: ${rows.length}`;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop(); // keep incomplete line
 
-        if (!rows.length) return;
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              try {
+                const evt = JSON.parse(line.slice(6));
+                if (evt.type === "progress") {
+                  const pct = evt.total ? Math.round((evt.current / evt.total) * 100) : 0;
+                  $("progress").className = "progress-bar";
+                  $("progress").style.width = pct + "%";
 
-        // Iterate and render each stock's data in the table
-        renderChartTable(rows);
-      } catch (e) {
-        $("status").textContent = "Error: " + (e.message || e);
-      }
-    }
-    function calculateBollingerBands(candles, window = 20, numDev = 2) {
-  const closes = candles.map(c => c.close);
-  const upperBand = [];
-  const lowerBand = [];
-  const middleBand = [];
-  
-  for (let i = window - 1; i < closes.length; i++) {
-    const slice = closes.slice(i - window + 1, i + 1);
-    const sma = slice.reduce((sum, value) => sum + value, 0) / window; // Middle band: SMA
-    const variance = slice.reduce((sum, value) => sum + Math.pow(value - sma, 2), 0) / window; // Variance
-    const stdDev = Math.sqrt(variance); // Standard deviation
-    
-    upperBand.push(sma + numDev * stdDev); // Upper band
-    lowerBand.push(sma - numDev * stdDev); // Lower band
-    middleBand.push(sma); // Middle band
-  }
-  
-  return { upperBand, lowerBand, middleBand };
-}
-function renderChartTable(rows) {
-  lastRows = rows; // cache for live re-render on stdDev change
-  const tbody = document.querySelector("#table tbody");
-  tbody.innerHTML = "";
+                  const stepLabel = {
+                    init: "Initializing...",
+                    fetch: `Fetching candles: ${evt.message}`,
+                    calculate: `Analyzing pattern: ${evt.message}`,
+                    ltp: "Fetching live prices...",
+                    saving: "Saving results to history...",
+                  }[evt.step] || evt.message;
 
-  // Clear the previous chart/tabs
-  $("tabs").innerHTML = "";
-  $("tab-panels").innerHTML = "";
+                  $("status").innerHTML = `<span style="color:var(--amber)">Round ${scanRound + 1}</span> | ${stepLabel} <span class="match-count">(${evt.current || 0}/${evt.total || 0})</span> | Matches: <span class="match-count">${evt.matches || 0}</span>`;
 
-  for (const r of rows) {
-    const tr = document.createElement("tr");
-    const c2h = r.hit?.candle2High;
-    const ltp = r.ltp ?? "";
-    const live = r.liveBreakAboveCandle2High;
+                  showScanningCenter(
+                    `Round ${scanRound + 1} — ${evt.current || 0}/${evt.total || 0}`,
+                    `${stepLabel}<br>Matches so far: <strong>${evt.matches || 0}</strong>`,
+                    true
+                  );
+                } else if (evt.type === "match") {
+                  // Flash match notification
+                  showScanningCenter(
+                    `Round ${scanRound + 1} — ${evt.current}/${evt.total}`,
+                    `Pattern found in <strong style="color:var(--green)">${evt.symbol}</strong><br>Total matches: <strong>${evt.matches}</strong>`,
+                    true
+                  );
+                } else if (evt.type === "done") {
+                  finalResult = evt;
+                } else if (evt.type === "error") {
+                  throw new Error(evt.message);
+                }
+              } catch (parseErr) {
+                if (parseErr.message && !parseErr.message.includes("JSON")) throw parseErr;
+              }
+            }
+          }
 
-    tr.innerHTML = `
-      <td><strong>${r.tradingsymbol}</strong></td>
-      <td>${r.exchange}</td>
-      <td>${Number.isFinite(c2h) ? c2h.toFixed(2) : ""}</td>
-      <td>${r.hit?.candle3?.time ? formatUTC(r.hit.candle3.time) : ""}</td>
-      <td>${typeof ltp === "number" ? ltp.toFixed(2) : ""}</td>
-      <td class="${live ? "ok" : ""}">${live === true ? "YES" : live === false ? "NO" : ""}</td>
-    `;
-    tbody.appendChild(tr);
-
-    // ----- TAB + CHART FOR EACH MATCH -----
-    const candles = r.candles;
-    if (candles && candles.length) {
-      const dates = candles.map(c => parseIST(c.time));
-      const opens = candles.map((c) => c.open);
-      const highs = candles.map((c) => c.high);
-      const lows = candles.map((c) => c.low);
-      const closes = candles.map((c) => c.close);
-      const indicatorValues = candles.map((c) => c.indicator);
-
-      // Calculate Bollinger Bands (Middle, Upper, Lower Bands)
-      const bollingerWindow = Number($("window").value) || 20;
-      const bollingerStdDev = parseFloat($("stdDev").value) || 2;
-      const { upperBand, lowerBand, middleBand } = calculateBollingerBands(candles, bollingerWindow, bollingerStdDev);
-      const chosenIndicator = $("indicator").value;
-      const bollingerOffset = bollingerWindow - 1;
-      const bollingerDates = dates.slice(bollingerOffset);
-
-      // Create tab button
-      const tabBtn = document.createElement("button");
-      tabBtn.className = "tab-btn";
-      tabBtn.textContent = r.tradingsymbol;
-
-      // Create panel
-      const panel = document.createElement("div");
-      panel.className = "tab-panel";
-
-      // Panel header with fullscreen button
-      const panelHeader = document.createElement("div");
-      panelHeader.className = "panel-header";
-      const fsBtn = document.createElement("button");
-      fsBtn.className = "btn-fullscreen";
-      fsBtn.textContent = "⛶ Fullscreen";
-      panelHeader.appendChild(fsBtn);
-      panel.appendChild(panelHeader);
-
-      // Chart div inside panel
-      const chartDiv = document.createElement("div");
-      chartDiv.className = "chart-box";
-
-      const chartId = `chart-${r.exchange}-${r.tradingsymbol}`.replace(/[^a-zA-Z0-9-_]/g, "");
-      chartDiv.id = chartId;
-      panel.appendChild(chartDiv);
-
-      // --- C1 / C2 / C3 candle indices from hit ---
-      const hit = r.hit;
-      const c1Idx = hit?.candle1Index ?? null;
-      const c2Idx = hit?.candle2Index ?? null;
-      const c3Idx = hit?.candle3Index ?? null;
-      const c1 = c1Idx !== null ? candles[c1Idx] : null;
-      const c2 = c2Idx !== null ? candles[c2Idx] : null;
-      const c3 = c3Idx !== null ? candles[c3Idx] : null;
-
-      // Candle detail table below chart
-      function fmtN(v) { return Number.isFinite(v) ? v.toFixed(2) : "—"; }
-      function fmtT(t) { return t ? formatUTC(t) : "—"; }
-      const candleTable = document.createElement("table");
-      candleTable.className = "candle-detail-table";
-      candleTable.innerHTML = `
-        <thead>
-          <tr>
-            <th>Candle</th>
-            <th>Time</th>
-            <th>Open</th>
-            <th>High</th>
-            <th>Low</th>
-            <th>Close</th>
-            <th>Volume</th>
-            <th>Indicator</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr class="c1-row">
-            <td><strong>C1</strong></td>
-            <td>${fmtT(c1?.time)}</td>
-            <td>${fmtN(c1?.open)}</td>
-            <td>${fmtN(c1?.high)}</td>
-            <td>${fmtN(c1?.low)}</td>
-            <td>${fmtN(c1?.close)}</td>
-            <td>${c1?.volume ?? "—"}</td>
-            <td>${fmtN(c1?.indicator)}</td>
-          </tr>
-          <tr class="c2-row">
-            <td><strong>C2</strong></td>
-            <td>${fmtT(c2?.time)}</td>
-            <td>${fmtN(c2?.open)}</td>
-            <td>${fmtN(c2?.high)}</td>
-            <td>${fmtN(c2?.low)}</td>
-            <td>${fmtN(c2?.close)}</td>
-            <td>${c2?.volume ?? "—"}</td>
-            <td>${fmtN(c2?.indicator)}</td>
-          </tr>
-          <tr class="c3-row">
-            <td><strong>C3</strong></td>
-            <td>${fmtT(c3?.time)}</td>
-            <td>${fmtN(c3?.open)}</td>
-            <td>${fmtN(c3?.high)}</td>
-            <td>${fmtN(c3?.low)}</td>
-            <td>${fmtN(c3?.close)}</td>
-            <td>${c3?.volume ?? "—"}</td>
-            <td>${fmtN(c3?.indicator)}</td>
-          </tr>
-        </tbody>
-      `;
-      panel.appendChild(candleTable);
-
-      $("tabs").appendChild(tabBtn);
-      $("tab-panels").appendChild(panel);
-
-      tabBtn.addEventListener("click", () => {
-        document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-        document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
-        tabBtn.classList.add("active");
-        panel.classList.add("active");
-        Plotly.Plots.resize(document.getElementById(chartId));
+          abortController = null;
+          if (finalResult) {
+            resolve(finalResult);
+          } else {
+            reject(new Error("Stream ended without result"));
+          }
+        }).catch(reject);
       });
+    }
 
-      // Plotly data (candles + indicator line + conditional Bollinger Bands)
-      const data = [
-        {
-          x: dates,
-          open: opens,
-          high: highs,
-          low: lows,
-          close: closes,
-          type: "candlestick",
-          name: r.tradingsymbol,
-        },
-        {
-          x: dates,
-          y: indicatorValues,
-          type: "scatter",
-          mode: "lines",
-          name: `${serverIndicator} (${$("window").value})`,
-          line: { width: 2, color: "#ff9800" },
-        },
-      ];
+    async function scanLoop() {
+      while (scanning) {
+        const selectedIndicator = $("indicator").value;
+        serverIndicator = selectedIndicator;
+        const stdDev = parseFloat($("stdDev").value) || 2;
 
-      // Add Bollinger traces based on selected indicator
-      if (chosenIndicator === "BOLLINGER_BAND") {
-        data.push({
-          x: bollingerDates, y: upperBand,
-          type: "scatter", mode: "lines",
-          name: `Upper Band (σ×${bollingerStdDev})`,
-          line: { width: 1, color: "green", dash: "dash" },
-        });
-        data.push({
-          x: bollingerDates, y: lowerBand,
-          type: "scatter", mode: "lines",
-          name: `Lower Band (σ×${bollingerStdDev})`,
-          line: { width: 1, color: "red", dash: "dash" },
-        });
-        data.push({
-          x: bollingerDates, y: middleBand,
-          type: "scatter", mode: "lines",
-          name: "Middle Band (SMA)",
-          line: { width: 2, color: "blue" },
-        });
-      } else if (chosenIndicator === "BOLLINGER_UPPER") {
-        data.push({
-          x: bollingerDates, y: upperBand,
-          type: "scatter", mode: "lines",
-          name: `Bollinger Upper (σ×${bollingerStdDev})`,
-          line: { width: 1.5, color: "green", dash: "dash" },
-        });
-      } else if (chosenIndicator === "BOLLINGER_LOWER") {
-        data.push({
-          x: bollingerDates, y: lowerBand,
-          type: "scatter", mode: "lines",
-          name: `Bollinger Lower (σ×${bollingerStdDev})`,
-          line: { width: 1.5, color: "red", dash: "dash" },
-        });
+        const payload = {
+          preset: $("preset").value,
+          timeframe: $("timeframe").value,
+          indicator: selectedIndicator,
+          window: Number($("window").value),
+          stdDev,
+          candle1Side: $("candle1Side").value,
+          breakoutMode: $("breakoutMode").value,
+          confirmWithLTP: true,
+        };
+
+        $("progress").className = "progress-bar";
+        $("progress").style.width = "0%";
+        showScanningCenter(`Round ${scanRound + 1}`, "Sending request...", true);
+
+        try {
+          const result = await runScanRound(payload);
+
+          if (!scanning) break;
+
+          const rows = result.results || [];
+          scanRound++;
+          totalMatches += rows.length;
+
+          // If 0 matches, add as ephemeral (not saved on server)
+          if (rows.length === 0) {
+            ephemeralHistory.unshift({
+              id: `ephemeral-${Date.now()}`,
+              ephemeral: true,
+              ts: new Date().toISOString(),
+              params: result.params || payload,
+              results: [],
+            });
+          }
+
+          const now = formatUTC(new Date().toISOString());
+          $("status").innerHTML = `Round <span class="match-count">${scanRound}</span> done | Last: <span class="match-count">${rows.length}</span> matches | Total: <span class="match-count">${totalMatches}</span>`;
+
+          showScanningCenter(
+            scanning ? `Round ${scanRound} complete` : `Completed ${scanRound} rounds`,
+            `Last scan: <span class="count">${rows.length}</span> matches at ${now}<br>Total matches: <strong>${totalMatches}</strong>${scanning ? "<br>Starting next round..." : "<br>Click a history entry to view charts"}`,
+            scanning
+          );
+
+          await fetchHistoryAndRender();
+
+        } catch (e) {
+          if (e.name === "AbortError" || !scanning) break;
+          $("status").innerHTML = `<span style="color:var(--red)">Round ${scanRound + 1} error: ${e.message || e}</span>`;
+          showScanningCenter(`Round ${scanRound + 1} — Error`, `<span style="color:var(--red)">${e.message || e}</span><br>Retrying in 3s...`, false);
+          await new Promise(r => setTimeout(r, 3000));
+        }
+
+        // Brief pause between rounds
+        if (scanning) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
       }
 
-      // --- C1 / C2 / C3 marker traces ---
-      const markerDefs = [
-        { candle: c1, idx: c1Idx, label: "C1", color: "#f57f17", symbol: "triangle-up" },
-        { candle: c2, idx: c2Idx, label: "C2", color: "#2e7d32", symbol: "circle" },
-        { candle: c3, idx: c3Idx, label: "C3", color: "#1565c0", symbol: "star" },
-      ];
-      for (const { candle, idx, label, color, symbol } of markerDefs) {
-        if (candle && idx !== null) {
+      // Clean up after loop exits
+      $("progress").className = "progress-bar";
+      $("progress").style.width = "0%";
+    }
+
+    // ── Bollinger Bands (client-side for chart) ──
+    function calculateBollingerBands(candles, window = 20, numDev = 2) {
+      const closes = candles.map(c => c.close);
+      const upperBand = [], lowerBand = [], middleBand = [];
+
+      for (let i = window - 1; i < closes.length; i++) {
+        const slice = closes.slice(i - window + 1, i + 1);
+        const sma = slice.reduce((s, v) => s + v, 0) / window;
+        const variance = slice.reduce((s, v) => s + Math.pow(v - sma, 2), 0) / window;
+        const sd = Math.sqrt(variance);
+        upperBand.push(sma + numDev * sd);
+        lowerBand.push(sma - numDev * sd);
+        middleBand.push(sma);
+      }
+
+      return { upperBand, lowerBand, middleBand };
+    }
+
+    // ── Render charts + results table (only on history click) ──
+    function renderChartTable(rows) {
+      lastRows = rows;
+      const tbody = document.querySelector("#table tbody");
+      tbody.innerHTML = "";
+      $("tabs").innerHTML = "";
+      $("tab-panels").innerHTML = "";
+
+      // Remove center msg when showing charts
+      $("centerMsg")?.remove();
+
+      const plotlyBase = getPlotlyLayout();
+      const cc = getCandleColors();
+
+      for (const r of rows) {
+        const tr = document.createElement("tr");
+        const firstHit = (r.hits || (r.hit ? [r.hit] : []))[0];
+        const c2h = firstHit?.candle2High;
+        const ltp = r.ltp ?? "";
+        const live = r.liveBreakAboveCandle2High;
+
+        tr.innerHTML = `
+          <td><strong>${r.tradingsymbol}</strong></td>
+          <td>${r.exchange}</td>
+          <td>${Number.isFinite(c2h) ? c2h.toFixed(2) : ""}</td>
+          <td>${firstHit?.candle3?.time ? formatUTC(firstHit.candle3.time) : ""}</td>
+          <td>${typeof ltp === "number" ? ltp.toFixed(2) : ""}</td>
+          <td class="${live ? "ok" : ""}">${live === true ? "YES" : live === false ? "NO" : ""}</td>
+        `;
+        tbody.appendChild(tr);
+
+        const candles = r.candles;
+        if (!candles || !candles.length) continue;
+
+        const dates = candles.map(c => parseIST(c.time));
+        const opens = candles.map(c => c.open);
+        const highs = candles.map(c => c.high);
+        const lows = candles.map(c => c.low);
+        const closes = candles.map(c => c.close);
+        const indicatorValues = candles.map(c => c.indicator);
+
+        const bollingerWindow = Number($("window").value) || 20;
+        const bollingerStdDev = parseFloat($("stdDev").value) || 2;
+        const { upperBand, lowerBand, middleBand } = calculateBollingerBands(candles, bollingerWindow, bollingerStdDev);
+        const chosenIndicator = $("indicator").value;
+        const bollingerOffset = bollingerWindow - 1;
+        const bollingerDates = dates.slice(bollingerOffset);
+
+        const tabBtn = document.createElement("button");
+        tabBtn.className = "tab-btn";
+        tabBtn.textContent = r.tradingsymbol.replace("-EQ", "");
+
+        const panel = document.createElement("div");
+        panel.className = "tab-panel";
+
+        const panelHeader = document.createElement("div");
+        panelHeader.className = "panel-header";
+        const fsBtn = document.createElement("button");
+        fsBtn.className = "btn-fullscreen";
+        fsBtn.textContent = "Fullscreen";
+        panelHeader.appendChild(fsBtn);
+        panel.appendChild(panelHeader);
+
+        const chartDiv = document.createElement("div");
+        chartDiv.className = "chart-box";
+        const chartId = `chart-${r.exchange}-${r.tradingsymbol}`.replace(/[^a-zA-Z0-9-_]/g, "");
+        chartDiv.id = chartId;
+        panel.appendChild(chartDiv);
+
+        const allHits = r.hits && r.hits.length ? r.hits : (r.hit ? [r.hit] : []);
+
+        function fmtN(v) { return Number.isFinite(v) ? v.toFixed(2) : "\u2014"; }
+        function fmtT(t) { return t ? formatUTC(t) : "\u2014"; }
+
+        const candleWrap = document.createElement("div");
+        candleWrap.className = "resizable-wrap candle-detail-wrap";
+
+        const candleTable = document.createElement("table");
+        candleTable.className = "candle-detail-table";
+        let html = `<thead><tr>`;
+        if (allHits.length > 1) html += `<th>Hit</th>`;
+        html += `<th>Candle</th><th>Time</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Vol</th><th>Indicator</th></tr></thead><tbody>`;
+
+        allHits.forEach((hit, hi) => {
+          const c1 = hit.candle1Index != null ? candles[hit.candle1Index] : null;
+          const c2 = hit.candle2Index != null ? candles[hit.candle2Index] : null;
+          const c3 = hit.candle3Index != null ? candles[hit.candle3Index] : null;
+          const hitCol = allHits.length > 1 ? `<td>#${hi+1}</td>` : "";
+          html += `
+            <tr class="c1-row">${hitCol}<td>C1</td><td>${fmtT(c1?.time)}</td><td>${fmtN(c1?.open)}</td><td>${fmtN(c1?.high)}</td><td>${fmtN(c1?.low)}</td><td>${fmtN(c1?.close)}</td><td>${c1?.volume ?? "\u2014"}</td><td>${fmtN(c1?.indicator)}</td></tr>
+            <tr class="c2-row">${hitCol}<td>C2</td><td>${fmtT(c2?.time)}</td><td>${fmtN(c2?.open)}</td><td>${fmtN(c2?.high)}</td><td>${fmtN(c2?.low)}</td><td>${fmtN(c2?.close)}</td><td>${c2?.volume ?? "\u2014"}</td><td>${fmtN(c2?.indicator)}</td></tr>
+            <tr class="c3-row">${hitCol}<td>C3</td><td>${fmtT(c3?.time)}</td><td>${fmtN(c3?.open)}</td><td>${fmtN(c3?.high)}</td><td>${fmtN(c3?.low)}</td><td>${fmtN(c3?.close)}</td><td>${c3?.volume ?? "\u2014"}</td><td>${fmtN(c3?.indicator)}</td></tr>
+          `;
+        });
+        html += `</tbody>`;
+        candleTable.innerHTML = html;
+        candleWrap.appendChild(candleTable);
+        panel.appendChild(candleWrap);
+
+        $("tabs").appendChild(tabBtn);
+        $("tab-panels").appendChild(panel);
+
+        tabBtn.addEventListener("click", () => {
+          document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+          document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+          tabBtn.classList.add("active");
+          panel.classList.add("active");
+          Plotly.Plots.resize(document.getElementById(chartId));
+        });
+
+        const isBollinger = isBollingerIndicator(chosenIndicator);
+        const indLabel = chosenIndicator.replace(/_/g, " ");
+
+        const data = [{
+          x: dates, open: opens, high: highs, low: lows, close: closes,
+          type: "candlestick", name: r.tradingsymbol.replace("-EQ", ""),
+          increasing: { line: { color: cc.up } },
+          decreasing: { line: { color: cc.down } },
+        }];
+
+        if (!isBollinger) {
           data.push({
-            x: [dates[idx]],
-            y: [candle.high * 1.002],   // slightly above the candle high
-            type: "scatter",
-            mode: "markers+text",
-            name: label,
-            text: [label],
-            textposition: "top center",
-            marker: { symbol, size: 14, color },
-            textfont: { size: 12, color, family: "Arial Black" },
-            showlegend: true,
+            x: dates, y: indicatorValues,
+            type: "scatter", mode: "lines",
+            name: `${indLabel} (${$("window").value})`,
+            line: { width: 1.5, color: "#ff9800" },
           });
         }
+
+        if (isBollinger) {
+          const activeU = chosenIndicator === "BOLLINGER_UPPER";
+          const activeL = chosenIndicator === "BOLLINGER_LOWER";
+          const activeM = chosenIndicator === "BOLLINGER_BAND";
+          data.push({
+            x: bollingerDates, y: upperBand, type: "scatter", mode: "lines",
+            name: `Upper (\u03c3\u00d7${bollingerStdDev})`,
+            line: { width: activeU ? 2.5 : 1, color: cc.up, dash: activeU ? "solid" : "dash" },
+          });
+          data.push({
+            x: bollingerDates, y: lowerBand, type: "scatter", mode: "lines",
+            name: `Lower (\u03c3\u00d7${bollingerStdDev})`,
+            line: { width: activeL ? 2.5 : 1, color: cc.down, dash: activeL ? "solid" : "dash" },
+          });
+          data.push({
+            x: bollingerDates, y: middleBand, type: "scatter", mode: "lines",
+            name: "Middle (SMA)",
+            line: { width: activeM ? 2.5 : 1.2, color: "#42a5f5", dash: activeM ? "solid" : "dot" },
+          });
+        }
+
+        const markerTypes = [
+          { key: "candle1Index", label: "C1", color: "#ffb74d", symbol: "triangle-up" },
+          { key: "candle2Index", label: "C2", color: "#26a69a", symbol: "circle" },
+          { key: "candle3Index", label: "C3", color: "#42a5f5", symbol: "star" },
+        ];
+        const multiHit = allHits.length > 1;
+        // Hit colors for distinguishing multiple hits
+        const hitColors = ["#ffb74d","#26a69a","#42a5f5","#ef5350","#ab47bc","#ffa726","#66bb6a","#ec407a","#29b6f6","#8d6e63"];
+
+        allHits.forEach((hit, hi) => {
+          const groupName = multiHit ? `Hit ${hi + 1}` : "Pattern";
+          const groupColor = multiHit ? (hitColors[hi % hitColors.length]) : null;
+
+          for (const { key, label, color: defaultColor, symbol } of markerTypes) {
+            const idx = hit[key];
+            const candle = idx != null ? candles[idx] : null;
+            if (!candle || idx == null) continue;
+            const mLabel = multiHit ? `${label}-${hi+1}` : label;
+            const mColor = multiHit ? groupColor : defaultColor;
+            data.push({
+              x: [dates[idx]], y: [candle.high * 1.002],
+              type: "scatter", mode: "markers+text",
+              name: mLabel, text: [mLabel], textposition: "top center",
+              marker: { symbol, size: 12, color: mColor },
+              textfont: { size: 12, color: mColor, family: "sans-serif" },
+              legendgroup: groupName,
+              legendgrouptitle: { text: groupName, font: { size: 11 } },
+            });
+          }
+        });
+
+        const hitCountLabel = allHits.length > 1 ? ` (${allHits.length} hits)` : "";
+        const layout = Object.assign({}, plotlyBase, {
+          title: { text: `${r.tradingsymbol.replace("-EQ","")} \u2013 ${indLabel}${hitCountLabel}`, font: { size: 15 } },
+          xaxis: { ...plotlyBase.xaxis },
+          yaxis: { ...plotlyBase.yaxis },
+          legend: { ...(plotlyBase.legend || {}), groupclick: "togglegroup" },
+        });
+
+        Plotly.purge(chartId);
+        Plotly.newPlot(chartId, data, layout, { responsive: true });
+
+        fsBtn.addEventListener("click", () => openFullscreen(chartId, data, layout));
       }
 
-      const layout = {
-        title: `${r.tradingsymbol} – Candles + ${chosenIndicator.replace(/_/g, " ")}`,
-        xaxis: { type: "date", rangeslider: { visible: false } },
-        yaxis: { title: "Price (INR)" },
-        legend: { orientation: "h", y: 1.1 },
-        margin: { t: 50, r: 20, b: 40, l: 60 },
-      };
+      const firstTab = document.querySelector(".tab-btn");
+      if (firstTab) firstTab.click();
 
-      Plotly.purge(chartId);
-      Plotly.newPlot(chartId, data, layout);
-
-      // Fullscreen button wiring
-      fsBtn.addEventListener("click", () => openFullscreen(chartId, data, layout));
+      $("resultsWrap").style.display = rows.length ? "" : "none";
     }
-  }
 
-  const firstTab = document.querySelector(".tab-btn");
-  if (firstTab) firstTab.click();
-
-  $("table").style.display = rows.length ? "table" : "none";
-}
-async function fetchHistoryAndRender() {
+    // ── History ──
+    async function fetchHistoryAndRender() {
       const resp = await fetch("/api/history");
       const json = await resp.json();
       if (!json.ok) return;
 
+      const serverHistory = json.history || [];
+      // Merge ephemeral (0-match) entries with server history, sorted newest first
+      const allHistory = [...ephemeralHistory, ...serverHistory].sort((a, b) => new Date(b.ts) - new Date(a.ts));
+
       const tbody = document.querySelector("#historyTable tbody");
       tbody.innerHTML = "";
 
-      json.history.forEach((h) => {
+      allHistory.forEach((h) => {
         const tr = document.createElement("tr");
-        tr.className = "clickable";
         tr.dataset.id = h.id;
-
+        if (h.ephemeral) tr.className = "ephemeral";
         const ts = formatUTC(h.ts);
-
         const matches = Array.isArray(h.results) ? h.results.length : 0;
 
         tr.innerHTML = `
           <td>${ts}</td>
-          <td>${h.params?.preset ?? ""}</td>
           <td>${h.params?.timeframe ?? ""}</td>
           <td>${h.params?.indicator ?? ""}</td>
           <td>${matches}</td>
+          <td><button class="delete-btn" title="Delete">&times;</button></td>
         `;
 
-       tr.addEventListener("click", async () => {
-  // Dummy row: render directly without API
-  if (String(h.id).startsWith("dummy-")) {
-    renderFromHistoryItem(h);
-    return;
-  }
+        // Delete button
+        tr.querySelector(".delete-btn").addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (h.ephemeral) {
+            ephemeralHistory = ephemeralHistory.filter(x => x.id !== h.id);
+          } else {
+            await fetch("/api/history/" + h.id, { method: "DELETE" });
+          }
+          await fetchHistoryAndRender();
+        });
 
-  const r = await fetch("/api/history/" + h.id);
-  const j = await r.json();
-  if (j.ok) renderFromHistoryItem(j.item);
-});
+        // Row click to view
+        tr.addEventListener("click", async () => {
+          document.querySelectorAll("#historyTable tbody tr").forEach(r => r.classList.remove("active-row"));
+          tr.classList.add("active-row");
 
+          if (h.ephemeral || String(h.id).startsWith("dummy-")) {
+            renderFromHistoryItem(h);
+            return;
+          }
+          const r = await fetch("/api/history/" + h.id);
+          const j = await r.json();
+          if (j.ok) renderFromHistoryItem(j.item);
+        });
 
-        tbody.appendChild(tr);
-      });
-      if (!json.history || json.history.length === 0) {
-  json.history = [
-    {
-      id: "dummy-1",
-      ts: Date.now(),
-      params: { preset: "2d", timeframe: "5m", indicator: "VWAP", window: 20, candle1Side: "BELOW", breakoutMode: "CLOSE" },
-      results: [] // keep empty; click will still load and show "Matches: 0"
-    }
-  ];
-}
-    }
-    function renderMatchedTable(results) {
-      const tbody = document.querySelector("#stockTable tbody");
-      tbody.innerHTML = "";
-
-      (results || []).forEach((r) => {
-        const candle2High = r.hit?.candle2High ?? "";
-        const triggeredAt = r.hit?.candle3?.time ? formatUTC(r.hit.candle3.time) : "";
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${r.tradingsymbol}</td>
-          <td>${Number.isFinite(r.ltp) ? r.ltp : ""}</td>
-          <td>${r.liveBreakAboveCandle2High === null ? "" : String(r.liveBreakAboveCandle2High)}</td>
-          <td>${candle2High}</td>
-          <td>${triggeredAt}</td>
-        `;
         tbody.appendChild(tr);
       });
     }
 
-    function renderChartFromResults(results) {
-      const traces = [];
+    // Refresh button — clears ephemeral entries and reloads
+    $("refreshHistory").addEventListener("click", () => {
+      ephemeralHistory = [];
+      fetchHistoryAndRender();
+    });
 
-      (results || []).forEach((r) => {
-        const candles = Array.isArray(r.candles) ? r.candles : [];
-        const x = candles.map((c) => c.time);
-        const open = candles.map((c) => c.open);
-        const high = candles.map((c) => c.high);
-        const low = candles.map((c) => c.low);
-        const close = candles.map((c) => c.close);
-        const ind = candles.map((c) => c.indicator);
+    function renderFromHistoryItem(item) {
+      const results = item.results || [];
+      if (item.params?.preset) $("preset").value = item.params.preset;
+      if (item.params?.timeframe) $("timeframe").value = item.params.timeframe;
+      if (item.params?.indicator) {
+        const uiInd = $("indicator").value;
+        if (!isBollingerIndicator(uiInd)) $("indicator").value = item.params.indicator;
+      }
+      if (Number.isFinite(item.params?.window)) $("window").value = item.params.window;
+      if (item.params?.candle1Side) $("candle1Side").value = item.params.candle1Side;
+      if (item.params?.breakoutMode) $("breakoutMode").value = item.params.breakoutMode;
 
-        // Candles
-        traces.push({
-          x, open, high, low, close,
-          type: "candlestick",
-          name: r.tradingsymbol,
-          showlegend: true
-        });
+      $("status").innerHTML = `History: ${formatUTC(item.ts)} | Matches: <span class="match-count">${results.length}</span>`;
 
-        // Indicator line
-        traces.push({
-          x,
-          y: ind,
-          type: "scatter",
-          mode: "lines",
-          name: r.tradingsymbol + " (ind)",
-          showlegend: false
-        });
-      });
-
-      const layout = {
-        title: "Matched Symbols (Candles + Indicator)",
-        xaxis: { title: "Time" },
-        yaxis: { title: "Price" }
-      };
-
-      Plotly.newPlot("chart", traces, layout);
+      if (results.length) {
+        renderChartTable(results);
+      } else {
+        // No matches — show message
+        $("tabs").innerHTML = "";
+        $("tab-panels").innerHTML = `<div class="center-msg" id="centerMsg"><div class="icon">&#9675;</div><div>No matches in this scan</div></div>`;
+        $("resultsWrap").style.display = "none";
+        document.querySelector("#table tbody").innerHTML = "";
+      }
     }
-   function renderFromHistoryItem(item) {
-  const results = item.results || [];
-
-  // Optional: update the top controls to reflect saved run params
-  if (item.params?.preset) $("preset").value = item.params.preset;
-  if (item.params?.timeframe) $("timeframe").value = item.params.timeframe;
-  if (item.params?.indicator) {
-    // History stores server-side indicator (e.g. SMA). Keep UI as-is if it's a Bollinger variant.
-    const uiInd = $("indicator").value;
-    if (!isBollingerIndicator(uiInd)) $("indicator").value = item.params.indicator;
-  }
-  if (Number.isFinite(item.params?.window)) $("window").value = item.params.window;
-  if (item.params?.candle1Side) $("candle1Side").value = item.params.candle1Side;
-  if (item.params?.breakoutMode) $("breakoutMode").value = item.params.breakoutMode;
-
-  // Show status
-  $("status").textContent = `Loaded from history: ${new Date(item.ts).toLocaleString()} | Matches: ${results.length}`;
-
-  // Render into the SAME left-side table + tabs/charts you already use
-  renderChartTable(results);
-}
-
-    // document.getElementById("stockForm").addEventListener("submit", async function (event) {
-    //   event.preventDefault();
-
-    //   const preset = document.getElementById("preset").value;
-    //   const timeframe = document.getElementById("timeframe").value;
-    //   const indicator = document.getElementById("indicator").value;
-    //   const window = Number(document.getElementById("window").value || 20);
-
-    //   const stocks = Array.from(document.getElementById("stocks").selectedOptions).map((o) => ({
-    //     exchange: "NSE",
-    //     tradingsymbol: o.value
-    //   }));
-
-    //   const response = await fetch("/api/screener", {
-    //     method: "POST",
-    //     headers: { "Content-Type": "application/json" },
-    //     body: JSON.stringify({
-    //       preset,
-    //       timeframe,
-    //       indicator,
-    //       window,
-    //       stocks,
-    //       confirmWithLTP: true
-    //     }),
-    //   });
-
-    //   const data = await response.json();
-    //   if (!data.ok) {
-    //     alert(data.error || "Failed");
-    //     return;
-    //   }
-
-    //   // render current run (server returns results incl candles already)
-    //   renderMatchedTable(data.results || []);
-    //   renderChartFromResults(data.results || []);
-
-    //   document.getElementById("runMeta").textContent =
-    //     "Last run: " + new Date().toLocaleString() + " | " + JSON.stringify(data.params);
-
-    //   // refresh history sidebar (since server saved it)
-    //   await fetchHistoryAndRender();
-    // });
 
     fetchHistoryAndRender();
 
     function openFullscreen(chartId, data, layout) {
-      const overlay = $("fullscreen-overlay");
-      const fsChart = $("fullscreen-chart");
-      overlay.classList.add("active");
-      Plotly.purge(fsChart);
-      const fsLayout = Object.assign({}, layout, { height: window.innerHeight - 120 });
-      Plotly.newPlot(fsChart, data, fsLayout, { responsive: true });
+      $("fullscreen-overlay").classList.add("active");
+      Plotly.purge($("fullscreen-chart"));
+      const fsLayout = Object.assign({}, layout, { height: window.innerHeight - 80 });
+      Plotly.newPlot($("fullscreen-chart"), data, fsLayout, { responsive: true });
     }
 
     function closeFullscreen() {
       $("fullscreen-overlay").classList.remove("active");
       Plotly.purge($("fullscreen-chart"));
     }
-
-    function formatUTC(ts) {
-  const d = new Date(ts);
-
-  // const yyyy = d.getUTCFullYear();
-  // const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  // const dd = String(d.getUTCDate()).padStart(2, "0");
-
-  // const hh = String(d.getUTCHours()).padStart(2, "0");
-  // const mi = String(d.getUTCMinutes()).padStart(2, "0");
-
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi} UTC`;
-}
   </script>
 </body>
-
 </html>
