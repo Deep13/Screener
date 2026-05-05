@@ -570,6 +570,11 @@
         <option value="2h">2H</option>
         <option value="4h">4H</option>
         <option value="2d">2D</option>
+        <option value="1w">1W</option>
+        <option value="1mo">1M</option>
+        <option value="3mo">3M</option>
+        <option value="6mo">6M</option>
+        <option value="1y">1Y</option>
       </select>
     </div>
 
@@ -582,6 +587,8 @@
         <option value="30m">30m</option>
         <option value="1h">1h</option>
         <option value="1d">1d</option>
+        <option value="1w">1w</option>
+        <option value="1mo">1mo</option>
       </select>
     </div>
 
@@ -632,6 +639,7 @@
 
     <div id="status"></div>
 
+    <a href="/watchlist.html" class="theme-toggle" id="watchlistLink" title="Open watchlist" style="text-decoration:none;font-size:13px;padding:6px 12px">Watchlist</a>
     <button class="theme-toggle" id="themeToggle" title="Toggle light / dark mode">&#9789;</button>
   </div>
 
@@ -795,13 +803,65 @@
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
+    // Angel One getCandleData per-call day limits, by interval
+    const TF_MAX_DAYS = {
+      "1m": 30, "3m": 60, "5m": 100, "10m": 100,
+      "15m": 200, "30m": 200, "1h": 400, "1d": 2000,
+    };
+    const PRESET_DAYS = {
+      "today": 1, "1h": 1, "2h": 1, "4h": 1,
+      "2d": 2, "1w": 7, "1mo": 30, "3mo": 90, "6mo": 180, "1y": 365,
+    };
+    // Angel One getCandleData rate limits
+    const RATE_LIMIT = { perSec: 3, perMin: 180, perHour: 5000 };
+    // Matches DEFAULT_STOCKS in server.js — keep in sync if that list changes.
+    const STOCKS_PER_ROUND = 119;
+
+    function checkApiLimit(preset, timeframe) {
+      // 1w/1mo timeframes always aggregate from daily candles server-side, so skip.
+      if (timeframe === "1w" || timeframe === "1mo") return null;
+      const need = PRESET_DAYS[preset] ?? 1;
+      const max = TF_MAX_DAYS[timeframe] ?? 30;
+      if (need > max) {
+        return `Preset "${preset}" requests ~${need} days of data, but Angel One allows only ~${max} days per call for ${timeframe} candles. The request will likely fail.`;
+      }
+      return null;
+    }
+
+    function getRateLimitNotice(stocksPerRound) {
+      const calls = stocksPerRound;
+      const minSecPerRound = Math.ceil(calls / RATE_LIMIT.perSec);
+      const maxRoundsPerMin = Math.max(1, Math.floor(RATE_LIMIT.perMin / calls));
+      const maxRoundsPerHour = Math.floor(RATE_LIMIT.perHour / calls);
+      return `Rate limits (getCandleData: ${RATE_LIMIT.perSec}/sec, ${RATE_LIMIT.perMin}/min, ${RATE_LIMIT.perHour}/hour):\n` +
+        `  • ~${calls} candle calls per round\n` +
+        `  • ≥${minSecPerRound}s per round (per-second cap)\n` +
+        `  • max ~${maxRoundsPerMin} round/min, ~${maxRoundsPerHour} rounds/hour before throttling`;
+    }
+
+    // Once per session per (preset, timeframe) — avoids nagging on every Run.
+    const ackedRateNotice = new Set();
+
     // ── Action button: Run / Stop ──
     $("actionBtn").addEventListener("click", () => {
       if (scanning) {
         stopScanning();
-      } else {
-        startScanning();
+        return;
       }
+      const preset = $("preset").value;
+      const timeframe = $("timeframe").value;
+      const capWarn = checkApiLimit(preset, timeframe);
+      const ackKey = `${preset}|${timeframe}`;
+      const needAck = capWarn || !ackedRateNotice.has(ackKey);
+      if (needAck) {
+        const msg =
+          (capWarn ? `WARNING: ${capWarn}\n\n` : "") +
+          getRateLimitNotice(STOCKS_PER_ROUND) +
+          `\n\nStart scanning?`;
+        if (!confirm(msg)) return;
+        ackedRateNotice.add(ackKey);
+      }
+      startScanning();
     });
 
     function startScanning() {

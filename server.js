@@ -40,6 +40,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
 const RESULTS_FILE = path.join(__dirname, "results_history_new.json");
+const WATCHLIST_FILE = path.join(__dirname, "watchlist.json");
 const MAX_HISTORY = 200;
 // ------------------------------------------------------------
 // Default watchlist (~130 large / midcap stocks).
@@ -258,8 +259,49 @@ function mapInterval(timeframe) {
     "30m": "THIRTY_MINUTE",
     "1h": "ONE_HOUR",
     "1d": "ONE_DAY",
+    // Weekly/monthly are built by aggregating ONE_DAY candles in-process.
+    "1w": "ONE_DAY",
+    "1mo": "ONE_DAY",
   };
   return m[String(timeframe || "").toLowerCase()] || "FIVE_MINUTE";
+}
+
+function isoWeekKey(d) {
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+function monthKey(d) {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function aggregateCandles(candles, kind /* 'week' | 'month' */) {
+  const keyFn = kind === "week" ? isoWeekKey : monthKey;
+  const groups = new Map();
+  for (const c of candles) {
+    const d = new Date(c.time);
+    const k = keyFn(d);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(c);
+  }
+  const out = [];
+  const sortedKeys = Array.from(groups.keys()).sort();
+  for (const k of sortedKeys) {
+    const arr = groups.get(k).sort((a, b) => new Date(a.time) - new Date(b.time));
+    out.push({
+      time: arr[0].time,
+      open: arr[0].open,
+      high: Math.max(...arr.map((x) => x.high)),
+      low: Math.min(...arr.map((x) => x.low)),
+      close: arr[arr.length - 1].close,
+      volume: arr.reduce((s, x) => s + (Number(x.volume) || 0), 0),
+    });
+  }
+  return out;
 }
 
 function pad(n) {
@@ -278,10 +320,16 @@ function getRangeFromPreset(preset) {
 
   const p = String(preset || "today").toLowerCase();
 
+  const DAY = 24 * 60 * 60 * 1000;
   if (p === "1h") return { from: new Date(now.getTime() - 1 * 60 * 60 * 1000), to: end };
   if (p === "2h") return { from: new Date(now.getTime() - 2 * 60 * 60 * 1000), to: end };
   if (p === "4h") return { from: new Date(now.getTime() - 4 * 60 * 60 * 1000), to: end };
-  if (p === "2d") return { from: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000), to: end };
+  if (p === "2d") return { from: new Date(now.getTime() - 2 * DAY), to: end };
+  if (p === "1w") return { from: new Date(now.getTime() - 7 * DAY), to: end };
+  if (p === "1mo") return { from: new Date(now.getTime() - 30 * DAY), to: end };
+  if (p === "3mo") return { from: new Date(now.getTime() - 90 * DAY), to: end };
+  if (p === "6mo") return { from: new Date(now.getTime() - 180 * DAY), to: end };
+  if (p === "1y") return { from: new Date(now.getTime() - 365 * DAY), to: end };
 
   // today (approx NSE cash hours start at 09:15 IST; you can tune this)
   const start = new Date(now);
@@ -292,8 +340,10 @@ function getRangeFromPreset(preset) {
 // ------------------------------------------------------------
 // Resolve symboltoken (scrip master)
 // NOTE: This is large JSON. For production, cache it for 1 day.
-let scripMasterCache = null;
+let scripMasterCache = null;          // raw array (kept for callers that need rows)
+let scripMasterIndex = null;          // Map<"EXCH:SYM", row> for O(1) lookup
 let scripMasterFetchedAt = 0;
+const tokenCache = new Map();         // Map<"EXCH:SYM", tokenString> — survives across scans
 
 async function loadScripMasterCached() {
   try {
@@ -306,8 +356,17 @@ async function loadScripMasterCached() {
     if (!res.ok) throw new Error(`Failed to load scrip master: ${res.status}`);
     const data = await res.json();
     console.log(`Scrip master loaded: ${data.length} entries`);
+    // Build the lookup index once per refresh — O(1) reads forever after.
+    const idx = new Map();
+    for (const row of data) {
+      const key = `${String(row.exch_seg).toUpperCase()}:${String(row.symbol).toUpperCase()}`;
+      // First entry wins on duplicate symbols (rare; matches old `.find()` behavior).
+      if (!idx.has(key)) idx.set(key, row);
+    }
     scripMasterCache = data;
+    scripMasterIndex = idx;
     scripMasterFetchedAt = Date.now();
+    tokenCache.clear(); // master refreshed → previous token snapshots may be stale
     return data;
   } catch (e) {
     console.error("Failed to load scrip master:", e);
@@ -318,13 +377,17 @@ async function loadScripMasterCached() {
 async function resolveSymbolTokenFromMaster(exchange, tradingsymbol) {
   const ex = String(exchange).toUpperCase();
   const ts = String(tradingsymbol).toUpperCase();
+  const key = `${ex}:${ts}`;
 
-  const data = await loadScripMasterCached();
-  console.log(`Resolving token for ${ex}:${ts} from scrip master with ${data.length} entries`);
-  const row = data.find((x) => String(x.exch_seg).toUpperCase() === ex && String(x.symbol).toUpperCase() === ts);
-  console.log(`Scrip master lookup: ${ex}:${ts} →`, row ? `token ${row.token}` : "NOT FOUND");
+  const cached = tokenCache.get(key);
+  if (cached) return cached;
+
+  await loadScripMasterCached();
+  const row = scripMasterIndex.get(key);
   if (!row) throw new Error(`Symbol not found in master: ${ex}:${ts}`);
-  return String(row.token);
+  const token = String(row.token);
+  tokenCache.set(key, token);
+  return token;
 }
 
 // ------------------------------------------------------------
@@ -398,12 +461,23 @@ async function getLTPBulk(exchangeTokens) {
 
 // ------------------------------------------------------------
 // Candle fetch
-async function fetchCandles(exchange, tradingsymbol, interval, preset) {
+async function fetchCandles(exchange, tradingsymbol, interval, preset, timeframe) {
   await ensureAngelSession();
-  console.log(`Fetching candles for ${exchange}:${tradingsymbol} | Interval: ${interval} | Preset: ${preset}`);
+  const tf = String(timeframe || "").toLowerCase();
+  const isWeekly = tf === "1w";
+  const isMonthly = tf === "1mo";
+
+  console.log(`Fetching candles for ${exchange}:${tradingsymbol} | Interval: ${interval} | Preset: ${preset} | TF: ${tf}`);
   const symboltoken = await resolveSymbolTokenFromMaster(exchange, tradingsymbol);
   console.log(`Resolved ${exchange}:${tradingsymbol} → token ${symboltoken}`);
-  const { from, to } = getRangeFromPreset(preset);
+
+  let { from, to } = getRangeFromPreset(preset);
+  // Weekly/monthly override the preset range — presets like "today"/"1h" can't produce enough bars.
+  if (isWeekly || isMonthly) {
+    to = new Date();
+    from = new Date();
+    from.setFullYear(from.getFullYear() - (isMonthly ? 5 : 2));
+  }
 
   const candleParams = {
     exchange,
@@ -419,7 +493,7 @@ async function fetchCandles(exchange, tradingsymbol, interval, preset) {
   }
 
   const rows = candleResp.data || [];
-  const candles = rows.map((r) => ({
+  let candles = rows.map((r) => ({
     time: new Date(r[0]).toISOString(),
     open: Number(r[1]),
     high: Number(r[2]),
@@ -427,6 +501,9 @@ async function fetchCandles(exchange, tradingsymbol, interval, preset) {
     close: Number(r[4]),
     volume: Number(r[5] ?? 0),
   }));
+
+  if (isWeekly) candles = aggregateCandles(candles, "week");
+  else if (isMonthly) candles = aggregateCandles(candles, "month");
 
   return { candles, symboltoken };
 }
@@ -569,7 +646,7 @@ app.get("/api/candles", async (req, res) => {
 
   try {
     const interval = mapInterval(timeframe);
-    const { candles } = await fetchCandles(exchange, tradingsymbol, interval, preset);
+    const { candles } = await fetchCandles(exchange, tradingsymbol, interval, preset, timeframe);
     const withIndicator = addIndicator(candles, indicator, window);
 
     res.json({
@@ -645,11 +722,11 @@ app.post("/api/screener", async (req, res) => {
     return { code: resp?.errorcode, apiMessage: resp?.message, raw: resp, msg };
   }
 
-  const fetchCandlesWithRetry = async (exchange, tradingsymbol, interval, preset, maxTry = 3) => {
+  const fetchCandlesWithRetry = async (exchange, tradingsymbol, interval, preset, timeframe, maxTry = 3) => {
     let lastError;
     for (let i = 1; i <= maxTry; i++) {
       try {
-        return await fetchCandles(exchange, tradingsymbol, interval, preset);
+        return await fetchCandles(exchange, tradingsymbol, interval, preset, timeframe);
       } catch (e) {
         lastError = e;
         const info = parseAngelError(e);
@@ -664,10 +741,12 @@ app.post("/api/screener", async (req, res) => {
     throw lastError;
   };
 
-  // Check if client disconnected
+  // Detect actual client disconnect on the *response* stream.
+  // Note: req.on("close") also fires when express.json() finishes consuming the
+  // request body, which would falsely mark every scan as disconnected.
   let clientDisconnected = false;
   let scanFinished = false;
-  req.on("close", () => {
+  res.on("close", () => {
     if (!scanFinished) {
       clientDisconnected = true;
       console.log("Client disconnected, aborting scan");
@@ -679,69 +758,97 @@ app.post("/api/screener", async (req, res) => {
     const ltpReq = { NSE: [], BSE: [], NFO: [], MCX: [] };
     let matchesSoFar = 0;
 
-    for (let idx = 0; idx < stocks.length; idx++) {
-      if (clientDisconnected) return;
+    // Bounded parallelism + token-bucket pacing for Angel's 3/sec getCandleData cap.
+    // SLOT_MS slightly above 1000/3 to stay safe under any sliding-window measurement.
+    const CONCURRENCY = 3;
+    const SLOT_MS = 340;
+    let pacerNextStartAt = 0;
+    const paceCandleStart = async () => {
+      const now = Date.now();
+      if (pacerNextStartAt <= now) {
+        pacerNextStartAt = now + SLOT_MS;
+        return;
+      }
+      const wait = pacerNextStartAt - now;
+      pacerNextStartAt += SLOT_MS;
+      await new Promise((r) => setTimeout(r, wait));
+    };
 
-      const s = stocks[idx];
-      const exchange = String(s.exchange || "NSE").toUpperCase();
-      const tradingsymbol = String(s.tradingsymbol || "").toUpperCase();
-      if (!tradingsymbol) continue;
+    const resultsByIdx = new Array(stocks.length);
+    let nextIdx = 0;
+    let completed = 0;
 
-      // Send progress: fetching candles
-      sendEvent("progress", {
-        step: "fetch",
-        message: `Fetching ${tradingsymbol}`,
-        current: idx + 1,
-        total: totalStocks,
-        matches: matchesSoFar,
-      });
+    const worker = async () => {
+      while (!clientDisconnected) {
+        const myIdx = nextIdx++;
+        if (myIdx >= stocks.length) return;
 
-      try {
-        const { candles, symboltoken } = await fetchCandlesWithRetry(exchange, tradingsymbol, interval, preset);
+        const s = stocks[myIdx];
+        const exchange = String(s.exchange || "NSE").toUpperCase();
+        const tradingsymbol = String(s.tradingsymbol || "").toUpperCase();
+        if (!tradingsymbol) { completed++; continue; }
 
-        console.log(`🕯️ ${tradingsymbol} candles: ${candles?.length ?? 0}`);
-
-        if (!candles || candles.length < 10) {
-          results.push({ exchange, tradingsymbol, symboltoken, match: false, reason: "Not enough candles" });
-          continue;
-        }
-
-        // Send progress: calculating pattern
         sendEvent("progress", {
-          step: "calculate",
-          message: `Analyzing ${tradingsymbol}`,
-          current: idx + 1,
+          step: "fetch",
+          message: `Fetching ${tradingsymbol}`,
+          current: completed + 1,
           total: totalStocks,
           matches: matchesSoFar,
         });
 
-        const withInd = addIndicator(candles, indicator, window, stdDev);
-        const hits = scanThreeCandlePattern(withInd, { candle1Side, breakoutMode });
+        await paceCandleStart();
+        if (clientDisconnected) return;
 
-        if (hits.length) {
-          matchesSoFar++;
-          console.log(`✅ Pattern HIT → ${tradingsymbol}`);
-          if (confirmWithLTP && ltpReq[exchange]) ltpReq[exchange].push(String(symboltoken));
-          results.push({ exchange, tradingsymbol, symboltoken, match: true, hits, lastCandle: withInd[withInd.length - 1], candles: withInd });
+        try {
+          const { candles, symboltoken } = await fetchCandlesWithRetry(exchange, tradingsymbol, interval, preset, timeframe);
+          console.log(`🕯️ ${tradingsymbol} candles: ${candles?.length ?? 0}`);
 
-          sendEvent("match", {
-            message: `Pattern found in ${tradingsymbol}`,
-            symbol: tradingsymbol,
-            current: idx + 1,
+          if (!candles || candles.length < 10) {
+            resultsByIdx[myIdx] = { exchange, tradingsymbol, symboltoken, match: false, reason: "Not enough candles" };
+            continue;
+          }
+
+          sendEvent("progress", {
+            step: "calculate",
+            message: `Analyzing ${tradingsymbol}`,
+            current: completed + 1,
             total: totalStocks,
             matches: matchesSoFar,
           });
-        } else {
-          results.push({ exchange, tradingsymbol, symboltoken, match: false });
-        }
-      } catch (e) {
-        const info = parseAngelError(e);
-        console.error(`🔥 ${tradingsymbol} failed`, { exchange, code: info.code, message: info.apiMessage || info.msg });
-        results.push({ exchange, tradingsymbol, match: false, error: info.code ? `${info.code}: ${info.apiMessage || info.msg}` : info.msg });
-      }
 
-      await new Promise((r) => setTimeout(r, 250));
-    }
+          const withInd = addIndicator(candles, indicator, window, stdDev);
+          const hits = scanThreeCandlePattern(withInd, { candle1Side, breakoutMode });
+
+          if (hits.length) {
+            matchesSoFar++;
+            console.log(`✅ Pattern HIT → ${tradingsymbol}`);
+            if (confirmWithLTP && ltpReq[exchange]) ltpReq[exchange].push(String(symboltoken));
+            resultsByIdx[myIdx] = { exchange, tradingsymbol, symboltoken, match: true, hits, lastCandle: withInd[withInd.length - 1], candles: withInd };
+
+            sendEvent("match", {
+              message: `Pattern found in ${tradingsymbol}`,
+              symbol: tradingsymbol,
+              current: completed + 1,
+              total: totalStocks,
+              matches: matchesSoFar,
+            });
+          } else {
+            resultsByIdx[myIdx] = { exchange, tradingsymbol, symboltoken, match: false };
+          }
+        } catch (e) {
+          const info = parseAngelError(e);
+          console.error(`🔥 ${tradingsymbol} failed`, { exchange, code: info.code, message: info.apiMessage || info.msg });
+          resultsByIdx[myIdx] = { exchange, tradingsymbol, match: false, error: info.code ? `${info.code}: ${info.apiMessage || info.msg}` : info.msg };
+        } finally {
+          completed++;
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, stocks.length) }, () => worker()));
+
+    // Flatten sparse → dense, preserving input order.
+    for (const r of resultsByIdx) if (r) results.push(r);
 
     if (clientDisconnected) return;
 
@@ -836,6 +943,136 @@ app.delete("/api/history/:id", async (req, res) => {
   if (filtered.length === list.length) return res.status(404).json({ ok: false, error: "Not found" });
   await writeHistory(filtered);
   res.json({ ok: true });
+});
+
+// ------------------------------------------------------------
+// Watchlist persistence
+async function readWatchlist() {
+  try {
+    const raw = await fs.readFile(WATCHLIST_FILE, "utf-8");
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function writeWatchlist(list) {
+  await fs.writeFile(WATCHLIST_FILE, JSON.stringify(list, null, 2), "utf-8");
+}
+
+function watchlistKey(exchange, tradingsymbol) {
+  return `${String(exchange).toUpperCase()}:${String(tradingsymbol).toUpperCase()}`;
+}
+
+// ------------------------------------------------------------
+// Search: fuzzy match scrip master by symbol or name (equities only)
+app.get("/api/search", async (req, res) => {
+  const q = String(req.query.q || "").trim().toUpperCase();
+  if (!q) return res.json({ ok: true, results: [] });
+  try {
+    const data = await loadScripMasterCached();
+    const results = [];
+    for (const row of data) {
+      const exch = String(row.exch_seg || "").toUpperCase();
+      if (exch !== "NSE" && exch !== "BSE") continue;
+      // skip derivatives (they have an expiry)
+      if (row.expiry && String(row.expiry).trim() !== "") continue;
+      const sym = String(row.symbol || "").toUpperCase();
+      const name = String(row.name || "").toUpperCase();
+      if (sym.includes(q) || name.includes(q)) {
+        results.push({
+          exchange: exch,
+          tradingsymbol: row.symbol,
+          name: row.name || row.symbol,
+          token: String(row.token),
+        });
+        if (results.length >= 30) break;
+      }
+    }
+    res.json({ ok: true, results });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+// ------------------------------------------------------------
+// Watchlist CRUD
+app.get("/api/watchlist", async (req, res) => {
+  const list = await readWatchlist();
+  res.json({ ok: true, watchlist: list });
+});
+
+app.post("/api/watchlist", async (req, res) => {
+  const { exchange, tradingsymbol, name, upperLimit, lowerLimit } = req.body || {};
+  if (!exchange || !tradingsymbol) {
+    return res.status(400).json({ ok: false, error: "exchange and tradingsymbol required" });
+  }
+  const list = await readWatchlist();
+  const key = watchlistKey(exchange, tradingsymbol);
+  const existing = list.find((x) => watchlistKey(x.exchange, x.tradingsymbol) === key);
+  const parseLimit = (v) => (v === null || v === "" || v === undefined ? null : Number(v));
+  if (existing) {
+    if (name !== undefined) existing.name = name;
+    if (upperLimit !== undefined) existing.upperLimit = parseLimit(upperLimit);
+    if (lowerLimit !== undefined) existing.lowerLimit = parseLimit(lowerLimit);
+  } else {
+    list.push({
+      exchange: String(exchange).toUpperCase(),
+      tradingsymbol: String(tradingsymbol).toUpperCase(),
+      name: name || tradingsymbol,
+      upperLimit: parseLimit(upperLimit),
+      lowerLimit: parseLimit(lowerLimit),
+      addedAt: new Date().toISOString(),
+    });
+  }
+  await writeWatchlist(list);
+  res.json({ ok: true, watchlist: list });
+});
+
+app.delete("/api/watchlist/:exchange/:tradingsymbol", async (req, res) => {
+  const key = watchlistKey(req.params.exchange, req.params.tradingsymbol);
+  const list = await readWatchlist();
+  const filtered = list.filter((x) => watchlistKey(x.exchange, x.tradingsymbol) !== key);
+  await writeWatchlist(filtered);
+  res.json({ ok: true, watchlist: filtered });
+});
+
+// ------------------------------------------------------------
+// Bulk LTP for the whole watchlist — polled by the watchlist UI for alerts
+app.get("/api/watchlist/ltp", async (req, res) => {
+  try {
+    const list = await readWatchlist();
+    if (!list.length) return res.json({ ok: true, prices: {} });
+
+    await ensureAngelSession();
+
+    const byExchange = {};
+    const symbolByExchToken = {};
+    for (const item of list) {
+      try {
+        const token = await resolveSymbolTokenFromMaster(item.exchange, item.tradingsymbol);
+        if (!byExchange[item.exchange]) byExchange[item.exchange] = [];
+        byExchange[item.exchange].push(String(token));
+        symbolByExchToken[`${item.exchange}:${token}`] = item.tradingsymbol;
+      } catch (e) {
+        console.warn(`watchlist ltp: unresolved ${item.exchange}:${item.tradingsymbol} — ${e.message}`);
+      }
+    }
+
+    if (!Object.keys(byExchange).length) return res.json({ ok: true, prices: {} });
+
+    const fetched = await getLTPBulk(byExchange);
+    const prices = {};
+    for (const row of fetched) {
+      const sym = symbolByExchToken[`${row.exchange}:${row.symbolToken}`];
+      if (sym) prices[watchlistKey(row.exchange, sym)] = Number(row.ltp);
+    }
+    res.json({ ok: true, prices });
+  } catch (e) {
+    console.error("watchlist ltp failed:", e);
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
 });
 
 app.listen(PORT, () => console.log(`✅ http://localhost:${PORT}`));

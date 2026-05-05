@@ -1,0 +1,1017 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Watchlist · 3C Screener</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #181b24;
+      --surface2: #1e222d;
+      --border: #2a2e3a;
+      --text: #e8eaed;
+      --text-muted: #9aa0ac;
+      --accent: #2962ff;
+      --accent-hover: #1e53e4;
+      --green: #26a69a;
+      --red: #ef5350;
+      --amber: #ffb74d;
+      --plot-bg: #181b24;
+      --plot-grid: #2a2e3a;
+      --plot-font: #e8eaed;
+      --candle-up: #26a69a;
+      --candle-down: #ef5350;
+      --logo-color: #fff;
+      --alert-bg: rgba(239, 83, 80, 0.18);
+      --alert-border: #ef5350;
+    }
+
+    body.light {
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --surface2: #f5f6f8;
+      --border: #d5d8dd;
+      --text: #1a1a2e;
+      --text-muted: #5f6672;
+      --accent: #2962ff;
+      --accent-hover: #1e53e4;
+      --green: #0d9f6e;
+      --red: #dc3545;
+      --amber: #e65100;
+      --plot-bg: #ffffff;
+      --plot-grid: #e0e3e8;
+      --plot-font: #1a1a2e;
+      --candle-up: #0d9f6e;
+      --candle-down: #dc3545;
+      --logo-color: #1a1a2e;
+      --alert-bg: rgba(220, 53, 69, 0.14);
+      --alert-border: #dc3545;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .topbar .logo {
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -0.3px;
+      color: var(--logo-color);
+    }
+    .topbar .logo span { color: var(--accent); }
+    .topbar .back-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .topbar .back-link:hover { color: var(--text); border-color: var(--text-muted); }
+    .topbar .spacer { flex: 1; }
+    .theme-toggle {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 5px 10px;
+      font-size: 16px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .theme-toggle:hover { border-color: var(--text-muted); }
+
+    /* Search */
+    .search-wrap {
+      display: flex;
+      justify-content: center;
+      padding: 20px 16px 12px;
+      position: relative;
+    }
+    .search-box {
+      position: relative;
+      width: min(640px, 92%);
+    }
+    .search-input {
+      width: 100%;
+      padding: 12px 44px 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--accent); }
+    .search-spinner {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 12px;
+      display: none;
+    }
+    .search-results {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 4px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      max-height: 320px;
+      overflow-y: auto;
+      display: none;
+      z-index: 50;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    }
+    .search-results.open { display: block; }
+    .search-row {
+      padding: 10px 14px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .search-row:last-child { border-bottom: none; }
+    .search-row:hover { background: var(--surface2); }
+    .search-row .sym { font-weight: 600; }
+    .search-row .name { color: var(--text-muted); font-size: 12px; }
+    .search-row .exch {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: var(--surface2);
+      color: var(--text-muted);
+    }
+    .search-empty { padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+    /* Main layout */
+    .main {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 12px;
+      padding: 0 16px 16px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* Chart panel */
+    .chart-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .chart-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .chart-controls .ctrl-group { display: flex; align-items: center; gap: 4px; }
+    .chart-controls label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+    .chart-controls select,
+    .chart-controls input {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 13px;
+      outline: none;
+    }
+    .chart-controls input[type="number"] { width: 64px; }
+    .chart-selected-symbol {
+      font-weight: 600;
+      font-size: 15px;
+      margin-right: auto;
+    }
+    .chart-selected-symbol .muted { color: var(--text-muted); font-weight: 400; font-size: 13px; }
+    #chart {
+      flex: 1;
+      min-height: 0;
+    }
+    .chart-placeholder {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* Watchlist panel */
+    .wl-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .wl-head {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .wl-head .title { font-weight: 600; }
+    .wl-head .count { color: var(--text-muted); font-size: 12px; }
+    .wl-list { flex: 1; overflow-y: auto; }
+    .wl-empty {
+      padding: 40px 16px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .wl-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .wl-item:hover { background: var(--surface2); }
+    .wl-item.active {
+      background: var(--surface2);
+      border-left: 3px solid var(--accent);
+      padding-left: 11px;
+    }
+    .wl-item.alerted {
+      background: var(--alert-bg);
+      border-left: 3px solid var(--alert-border);
+      padding-left: 11px;
+      animation: alertPulse 1.2s ease-in-out infinite;
+    }
+    @keyframes alertPulse {
+      0%, 100% { background: var(--alert-bg); }
+      50% { background: rgba(239, 83, 80, 0.32); }
+    }
+    .wl-item .row1 {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .wl-item .sym {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .wl-item .ltp {
+      font-weight: 600;
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+    .wl-item .name {
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .wl-item .limits {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .wl-item .limits input {
+      width: 80px;
+      padding: 3px 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      font-size: 12px;
+      outline: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .wl-item .limits input:focus { border-color: var(--accent); }
+    .wl-item .limit-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .wl-item .del {
+      margin-left: auto;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 15px;
+      padding: 2px 4px;
+    }
+    .wl-item .del:hover { color: var(--red); }
+    .wl-item .alert-badge {
+      display: inline-block;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: var(--red);
+      color: #fff;
+      margin-left: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .wl-status {
+      padding: 8px 14px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+    .dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="logo"><span>3C</span> Watchlist</div>
+    <a href="/" class="back-link">← Screener</a>
+    <div class="spacer"></div>
+    <button class="theme-toggle" id="themeToggle" title="Toggle light / dark mode">&#9789;</button>
+  </div>
+
+  <!-- Search -->
+  <div class="search-wrap">
+    <div class="search-box">
+      <input class="search-input" id="search" type="text" placeholder="Search symbol or company name (e.g. RELIANCE, TCS, Infosys)" autocomplete="off" />
+      <span class="search-spinner" id="searchSpinner">…</span>
+      <div class="search-results" id="searchResults"></div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Chart -->
+    <div class="chart-panel">
+      <div class="chart-controls">
+        <div class="chart-selected-symbol" id="selectedSymbol"><span class="muted">Select a stock from the watchlist</span></div>
+
+        <div class="ctrl-group">
+          <label>Preset</label>
+          <select id="preset">
+            <option value="today">Today</option>
+            <option value="1h">1H</option>
+            <option value="2h">2H</option>
+            <option value="4h">4H</option>
+            <option value="2d" selected>2D</option>
+            <option value="1w">1W</option>
+            <option value="1mo">1M</option>
+            <option value="3mo">3M</option>
+            <option value="6mo">6M</option>
+            <option value="1y">1Y</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label>TF</label>
+          <select id="timeframe">
+            <option value="1m">1m</option>
+            <option value="5m" selected>5m</option>
+            <option value="15m">15m</option>
+            <option value="30m">30m</option>
+            <option value="1h">1h</option>
+            <option value="1d">1d</option>
+            <option value="1w">1w</option>
+            <option value="1mo">1mo</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label>Indicator</label>
+          <select id="indicator">
+            <option value="VWAP" selected>VWAP</option>
+            <option value="SMA">SMA</option>
+            <option value="EMA">EMA</option>
+            <option value="CLOSE">Close</option>
+          </select>
+        </div>
+        <div class="ctrl-group">
+          <label>Win</label>
+          <input id="window" type="number" min="2" max="200" value="20" />
+        </div>
+      </div>
+      <div id="chart" style="display:none"></div>
+      <div class="chart-placeholder" id="chartPlaceholder">Select a stock from the watchlist to view its chart</div>
+    </div>
+
+    <!-- Watchlist -->
+    <div class="wl-panel">
+      <div class="wl-head">
+        <div class="title">Watchlist</div>
+        <div class="count" id="wlCount">0</div>
+      </div>
+      <div class="wl-list" id="wlList">
+        <div class="wl-empty">Use the search bar above to add stocks.</div>
+      </div>
+      <div class="wl-status">
+        <span><span class="dot" id="pollDot"></span><span id="pollStatus">Idle</span></span>
+        <span id="pollTime"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    // ── Theme ──
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    if (savedTheme === "light") document.body.classList.add("light");
+    $("themeToggle").addEventListener("click", () => {
+      document.body.classList.toggle("light");
+      localStorage.setItem("theme", document.body.classList.contains("light") ? "light" : "dark");
+      if (currentChartData) renderChart(currentChartData);
+    });
+
+    // ── State ──
+    let watchlist = [];
+    let selectedKey = null; // "EXCH:SYMBOL"
+    let currentChartData = null;
+    const lastLtpByKey = {};   // previous poll prices
+    const alertedKeys = new Set();
+    let audioCtx = null;
+
+    const keyOf = (item) => `${item.exchange}:${item.tradingsymbol}`.toUpperCase();
+
+    // ── Dummy stock for alarm-flow testing (client-side only) ──
+    const DUMMY_KEY = "TEST:DUMMY";
+    const dummyEntry = {
+      exchange: "TEST",
+      tradingsymbol: "DUMMY",
+      name: "Simulated stock — set upper/lower to test alarms",
+      upperLimit: null,
+      lowerLimit: null,
+      __dummy: true,
+    };
+    // target/direction/stepSize are set by configureDummyJourney() each time limits change.
+    // ~6 polls × 5s ≈ 30s to cross the limit; tweak POLLS_TO_CROSS to taste.
+    const POLLS_TO_CROSS = 6;
+    const dummySim = { ltp: 100, target: null, direction: 0, stepSize: 0 };
+
+    const isDummyStock = (s) => s?.__dummy === true || (s && keyOf(s) === DUMMY_KEY);
+    const rebuildWatchlist = (serverItems) => {
+      watchlist = [dummyEntry, ...(serverItems || []).filter((s) => !isDummyStock(s))];
+    };
+
+    function configureDummyJourney() {
+      const u = dummyEntry.upperLimit;
+      const l = dummyEntry.lowerLimit;
+      let start = dummySim.ltp;
+      let target = null;
+      if (u != null && l != null) {
+        start = (u + l) / 2;
+        // Walk toward whichever side has more room — gives a longer, visible journey.
+        target = (u - start) >= (start - l) ? u : l;
+      } else if (u != null) {
+        start = u - Math.max(2, Math.abs(u) * 0.05);
+        target = u;
+      } else if (l != null) {
+        start = l + Math.max(2, Math.abs(l) * 0.05);
+        target = l;
+      }
+      dummySim.ltp = +start.toFixed(2);
+      dummySim.target = target;
+      if (target != null) {
+        const dist = target - start;
+        dummySim.direction = Math.sign(dist);
+        dummySim.stepSize = Math.abs(dist) / POLLS_TO_CROSS;
+      } else {
+        dummySim.direction = 0;
+        dummySim.stepSize = 0;
+      }
+    }
+
+    function generateDummyCandles(count, base) {
+      const candles = [];
+      let price = base;
+      let t = Date.now() - count * 5 * 60 * 1000;
+      for (let i = 0; i < count; i++) {
+        const drift = (Math.random() - 0.5) * 1.5;
+        const open = price;
+        const close = +(open + drift).toFixed(2);
+        const high = +(Math.max(open, close) + Math.random() * 0.8).toFixed(2);
+        const low = +(Math.min(open, close) - Math.random() * 0.8).toFixed(2);
+        candles.push({
+          time: new Date(t).toISOString(),
+          open, high, low, close,
+          volume: Math.floor(Math.random() * 10000),
+          indicator: +(close + (Math.random() - 0.5) * 0.5).toFixed(2),
+        });
+        price = close;
+        t += 5 * 60 * 1000;
+      }
+      return candles;
+    }
+
+    function stepDummyLtp(stock) {
+      const noise = (Math.random() - 0.5) * 0.3;
+      if (dummySim.target == null || dummySim.direction === 0) {
+        // No journey configured — gentle random walk.
+        dummySim.ltp = +(dummySim.ltp + noise).toFixed(2);
+        return dummySim.ltp;
+      }
+      const distRemaining = (dummySim.target - dummySim.ltp) * dummySim.direction;
+      if (distRemaining < -1) {
+        // Already past the target — drift so we don't oscillate back across it.
+        dummySim.ltp = +(dummySim.ltp + noise).toFixed(2);
+        return dummySim.ltp;
+      }
+      dummySim.ltp = +(dummySim.ltp + dummySim.direction * dummySim.stepSize + noise).toFixed(2);
+      return dummySim.ltp;
+    }
+
+    // ── Web Audio beep (unlocked on first user gesture) ──
+    function ensureAudio() {
+      if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { return null; }
+      }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      return audioCtx;
+    }
+    document.addEventListener("click", ensureAudio, { once: true });
+
+    function beep(durationMs = 280, freq = 880) {
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + durationMs / 1000);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + durationMs / 1000 + 0.02);
+    }
+
+    // Multi-beep siren-style warning. direction: "upper" (rising) or "lower" (falling).
+    function playWarningTone(direction = "upper") {
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      // High-low-high pattern; pitch order swaps based on direction so upper/lower sound different.
+      const pattern = direction === "lower" ? [620, 880, 620] : [1100, 740, 1100];
+      const beepDur = 0.18;   // seconds per tone
+      const gap = 0.08;       // silence between tones
+      const peakGain = 0.32;
+      let t = ctx.currentTime;
+      for (const freq of pattern) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "square"; // sharper, more "alarm-like" than sine
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(peakGain, t + 0.01);
+        gain.gain.setValueAtTime(peakGain, t + beepDur - 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + beepDur);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + beepDur + 0.01);
+        t += beepDur + gap;
+      }
+    }
+
+    // ── Search ──
+    let searchTimer = null;
+    $("search").addEventListener("input", (e) => {
+      clearTimeout(searchTimer);
+      const q = e.target.value.trim();
+      if (!q) { hideSearch(); return; }
+      searchTimer = setTimeout(() => runSearch(q), 280);
+    });
+    $("search").addEventListener("focus", () => {
+      const q = $("search").value.trim();
+      if (q) runSearch(q);
+    });
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".search-box")) hideSearch();
+    });
+
+    function hideSearch() { $("searchResults").classList.remove("open"); }
+
+    async function runSearch(q) {
+      $("searchSpinner").style.display = "inline";
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const json = await res.json();
+        renderSearchResults(json.results || []);
+      } catch (e) {
+        $("searchResults").innerHTML = `<div class="search-empty">Search failed: ${e.message || e}</div>`;
+        $("searchResults").classList.add("open");
+      } finally {
+        $("searchSpinner").style.display = "none";
+      }
+    }
+
+    function renderSearchResults(results) {
+      const box = $("searchResults");
+      if (!results.length) {
+        box.innerHTML = `<div class="search-empty">No matches</div>`;
+        box.classList.add("open");
+        return;
+      }
+      const existingKeys = new Set(watchlist.map(keyOf));
+      box.innerHTML = results.map((r) => {
+        const k = `${r.exchange}:${r.tradingsymbol}`.toUpperCase();
+        const added = existingKeys.has(k);
+        return `
+          <div class="search-row" data-exchange="${r.exchange}" data-tradingsymbol="${r.tradingsymbol}" data-name="${(r.name || "").replace(/"/g, "&quot;")}">
+            <div>
+              <div class="sym">${r.tradingsymbol}</div>
+              <div class="name">${r.name || ""}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="exch">${r.exchange}</span>
+              ${added ? '<span class="exch" style="color:var(--green)">added</span>' : ""}
+            </div>
+          </div>
+        `;
+      }).join("");
+      box.classList.add("open");
+      box.querySelectorAll(".search-row").forEach((row) => {
+        row.addEventListener("click", async () => {
+          const exchange = row.dataset.exchange;
+          const tradingsymbol = row.dataset.tradingsymbol;
+          const name = row.dataset.name;
+          await addToWatchlist({ exchange, tradingsymbol, name });
+          $("search").value = "";
+          hideSearch();
+        });
+      });
+    }
+
+    // ── Watchlist CRUD ──
+    async function loadWatchlist() {
+      const res = await fetch("/api/watchlist");
+      const json = await res.json();
+      rebuildWatchlist(json.watchlist || []);
+      renderWatchlist();
+      if (!selectedKey && watchlist.length) selectStock(watchlist[0]);
+    }
+
+    async function addToWatchlist(stock) {
+      if (isDummyStock(stock)) return;
+      const res = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(stock),
+      });
+      const json = await res.json();
+      rebuildWatchlist(json.watchlist || []);
+      renderWatchlist();
+      // Select the just-added stock if none selected
+      if (!selectedKey) selectStock(watchlist[watchlist.length - 1]);
+      // Trigger immediate LTP refresh
+      pollLtp();
+    }
+
+    async function updateLimits(stock, upperLimit, lowerLimit) {
+      if (isDummyStock(stock)) {
+        const u = upperLimit !== "" && upperLimit != null ? Number(upperLimit) : null;
+        const l = lowerLimit !== "" && lowerLimit != null ? Number(lowerLimit) : null;
+        dummyEntry.upperLimit = u;
+        dummyEntry.lowerLimit = l;
+        configureDummyJourney();
+        alertedKeys.delete(DUMMY_KEY);
+        delete lastLtpByKey[DUMMY_KEY];
+        renderWatchlist();
+        pollLtp();
+        return;
+      }
+      const res = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exchange: stock.exchange,
+          tradingsymbol: stock.tradingsymbol,
+          upperLimit,
+          lowerLimit,
+        }),
+      });
+      const json = await res.json();
+      rebuildWatchlist(json.watchlist || []);
+      // Reset the alert on the edited item when limits change
+      alertedKeys.delete(keyOf(stock));
+      renderWatchlist();
+    }
+
+    async function removeFromWatchlist(stock) {
+      if (isDummyStock(stock)) {
+        alert("The dummy test stock can't be removed — it's wired in for alarm testing.");
+        return;
+      }
+      await fetch(`/api/watchlist/${encodeURIComponent(stock.exchange)}/${encodeURIComponent(stock.tradingsymbol)}`, { method: "DELETE" });
+      const k = keyOf(stock);
+      alertedKeys.delete(k);
+      delete lastLtpByKey[k];
+      if (selectedKey === k) {
+        selectedKey = null;
+        currentChartData = null;
+        $("chart").style.display = "none";
+        $("chartPlaceholder").style.display = "flex";
+        $("selectedSymbol").innerHTML = '<span class="muted">Select a stock from the watchlist</span>';
+      }
+      await loadWatchlist();
+    }
+
+    function renderWatchlist() {
+      const list = $("wlList");
+      $("wlCount").textContent = watchlist.length;
+      if (!watchlist.length) {
+        list.innerHTML = `<div class="wl-empty">Use the search bar above to add stocks.</div>`;
+        return;
+      }
+      list.innerHTML = watchlist.map((s) => {
+        const k = keyOf(s);
+        const ltp = lastLtpByKey[k];
+        const alerted = alertedKeys.has(k);
+        const active = selectedKey === k;
+        return `
+          <div class="wl-item${active ? " active" : ""}${alerted ? " alerted" : ""}" data-key="${k}">
+            <div class="row1">
+              <div>
+                <span class="sym">${s.tradingsymbol}</span>
+                ${alerted ? '<span class="alert-badge">alert</span>' : ""}
+              </div>
+              <div class="ltp">${ltp != null ? ltp.toFixed(2) : "—"}</div>
+            </div>
+            <div class="name">${s.name || ""}</div>
+            <div class="limits" data-limits-row>
+              <span class="limit-label">↑</span>
+              <input type="number" step="0.05" data-limit="upper" value="${s.upperLimit ?? ""}" placeholder="upper" />
+              <span class="limit-label">↓</span>
+              <input type="number" step="0.05" data-limit="lower" value="${s.lowerLimit ?? ""}" placeholder="lower" />
+              <button class="del" data-del title="Remove">✕</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      list.querySelectorAll(".wl-item").forEach((el) => {
+        const k = el.dataset.key;
+        const stock = watchlist.find((s) => keyOf(s) === k);
+        if (!stock) return;
+
+        el.addEventListener("click", (e) => {
+          if (e.target.closest("[data-limits-row]") || e.target.closest("[data-del]")) return;
+          // Clicking a row acknowledges its alert
+          if (alertedKeys.has(k)) {
+            alertedKeys.delete(k);
+            renderWatchlist();
+          }
+          selectStock(stock);
+        });
+
+        el.querySelectorAll("input[data-limit]").forEach((inp) => {
+          // Stop row click from firing when editing
+          inp.addEventListener("click", (e) => e.stopPropagation());
+          inp.addEventListener("change", async () => {
+            const upper = el.querySelector('input[data-limit="upper"]').value;
+            const lower = el.querySelector('input[data-limit="lower"]').value;
+            await updateLimits(stock, upper, lower);
+          });
+        });
+
+        el.querySelector("[data-del]")?.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!confirm(`Remove ${stock.tradingsymbol} from watchlist?`)) return;
+          await removeFromWatchlist(stock);
+        });
+      });
+    }
+
+    // ── Chart ──
+    function getCssVar(name) {
+      return getComputedStyle(document.body).getPropertyValue(name).trim();
+    }
+
+    function selectStock(stock) {
+      if (!stock) return;
+      selectedKey = keyOf(stock);
+      $("selectedSymbol").innerHTML = `${stock.tradingsymbol} <span class="muted">${stock.name || ""}</span>`;
+      renderWatchlist();
+      fetchAndRenderChart(stock);
+    }
+
+    async function fetchAndRenderChart(stock) {
+      if (isDummyStock(stock)) {
+        const candles = generateDummyCandles(200, dummySim.ltp || 100);
+        currentChartData = { stock, candles, params: { indicator: "Simulated" }, source: "dummy_local" };
+        renderChart(currentChartData);
+        return;
+      }
+      const qs = new URLSearchParams({
+        exchange: stock.exchange,
+        tradingsymbol: stock.tradingsymbol,
+        preset: $("preset").value,
+        timeframe: $("timeframe").value,
+        indicator: $("indicator").value,
+        window: $("window").value,
+      }).toString();
+
+      $("chartPlaceholder").textContent = "Loading chart…";
+      $("chart").style.display = "none";
+      $("chartPlaceholder").style.display = "flex";
+
+      try {
+        const res = await fetch(`/api/candles?${qs}`);
+        const json = await res.json();
+        if (!json.ok || !json.candles?.length) {
+          $("chartPlaceholder").textContent = "No chart data available.";
+          return;
+        }
+        currentChartData = { stock, candles: json.candles, params: json.params, source: json.source };
+        renderChart(currentChartData);
+      } catch (e) {
+        $("chartPlaceholder").textContent = `Chart load failed: ${e.message || e}`;
+      }
+    }
+
+    function renderChart({ stock, candles, params, source }) {
+      const times = candles.map((c) => c.time);
+      const opens = candles.map((c) => c.open);
+      const highs = candles.map((c) => c.high);
+      const lows = candles.map((c) => c.low);
+      const closes = candles.map((c) => c.close);
+      const indicatorSeries = candles.map((c) => c.indicator);
+
+      const candleTrace = {
+        x: times,
+        open: opens, high: highs, low: lows, close: closes,
+        type: "candlestick",
+        name: stock.tradingsymbol,
+        increasing: { line: { color: getCssVar("--candle-up") }, fillcolor: getCssVar("--candle-up") },
+        decreasing: { line: { color: getCssVar("--candle-down") }, fillcolor: getCssVar("--candle-down") },
+      };
+      const indTrace = {
+        x: times,
+        y: indicatorSeries,
+        type: "scatter",
+        mode: "lines",
+        name: params?.indicator || "Indicator",
+        line: { color: getCssVar("--amber"), width: 1.5 },
+      };
+
+      const layout = {
+        paper_bgcolor: getCssVar("--plot-bg"),
+        plot_bgcolor: getCssVar("--plot-bg"),
+        font: { color: getCssVar("--plot-font"), size: 11 },
+        margin: { l: 50, r: 20, t: 20, b: 40 },
+        xaxis: { gridcolor: getCssVar("--plot-grid"), rangeslider: { visible: false } },
+        yaxis: { gridcolor: getCssVar("--plot-grid"), side: "right" },
+        legend: { orientation: "h", y: 1.05, x: 0 },
+        showlegend: true,
+      };
+      if (source === "dummy_fallback") {
+        layout.title = { text: "⚠ Dummy data (Angel session unavailable)", font: { color: getCssVar("--amber"), size: 12 } };
+      } else if (source === "dummy_local") {
+        layout.title = { text: "🧪 Simulated test stock — set upper/lower limits to fire the alarm", font: { color: getCssVar("--amber"), size: 12 } };
+      }
+
+      $("chart").style.display = "block";
+      $("chartPlaceholder").style.display = "none";
+      Plotly.newPlot("chart", [candleTrace, indTrace], layout, { displayModeBar: false, responsive: true });
+    }
+
+    // Re-render chart when filters change
+    ["preset", "timeframe", "indicator", "window"].forEach((id) => {
+      $(id).addEventListener("change", () => {
+        if (!selectedKey) return;
+        const stock = watchlist.find((s) => keyOf(s) === selectedKey);
+        if (stock) fetchAndRenderChart(stock);
+      });
+    });
+
+    // ── Live LTP polling + alerts ──
+    const POLL_MS = 5000;
+    let pollTimer = null;
+
+    async function pollLtp() {
+      if (!watchlist.length) {
+        $("pollStatus").textContent = "Idle";
+        return;
+      }
+      $("pollStatus").textContent = "Polling…";
+      let prices = {};
+      let serverErr = null;
+      // Only hit the server if there are real (non-dummy) stocks.
+      const hasReal = watchlist.some((s) => !isDummyStock(s));
+      if (hasReal) {
+        try {
+          const res = await fetch("/api/watchlist/ltp");
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error || "ltp fetch failed");
+          prices = json.prices || {};
+        } catch (e) {
+          serverErr = e.message || String(e);
+        }
+      }
+      try {
+        // Simulate dummy LTP every poll regardless of server outcome.
+        const dummy = watchlist.find(isDummyStock);
+        if (dummy) prices[DUMMY_KEY] = stepDummyLtp(dummy);
+
+        let anyChange = false;
+        for (const stock of watchlist) {
+          const k = keyOf(stock);
+          const ltp = prices[k];
+          if (ltp == null || !Number.isFinite(ltp)) continue;
+          const prev = lastLtpByKey[k];
+
+          if (prev != null) {
+            // Upper trigger: prev below, now at/above
+            if (stock.upperLimit != null && prev < stock.upperLimit && ltp >= stock.upperLimit) {
+              if (!alertedKeys.has(k)) {
+                alertedKeys.add(k);
+                playWarningTone("upper");
+                anyChange = true;
+              }
+            }
+            // Lower trigger: prev above, now at/below
+            if (stock.lowerLimit != null && prev > stock.lowerLimit && ltp <= stock.lowerLimit) {
+              if (!alertedKeys.has(k)) {
+                alertedKeys.add(k);
+                playWarningTone("lower");
+                anyChange = true;
+              }
+            }
+            // Clear alert when price returns fully between limits
+            if (alertedKeys.has(k)) {
+              const aboveLower = stock.lowerLimit == null || ltp > stock.lowerLimit;
+              const belowUpper = stock.upperLimit == null || ltp < stock.upperLimit;
+              if (aboveLower && belowUpper) {
+                // Only auto-clear if we've moved strictly back inside
+                // (keep the visual until user acks by clicking; don't auto-clear here)
+              }
+            }
+          }
+          lastLtpByKey[k] = ltp;
+        }
+        renderWatchlist();
+        $("pollStatus").textContent = serverErr ? `Sim only · server: ${serverErr}` : "Live";
+        $("pollTime").textContent = new Date().toLocaleTimeString();
+      } catch (e) {
+        $("pollStatus").textContent = `Error: ${e.message || e}`;
+      }
+    }
+
+    function startPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(pollLtp, POLL_MS);
+      pollLtp();
+    }
+
+    // ── Init ──
+    (async function init() {
+      await loadWatchlist();
+      startPolling();
+    })();
+  </script>
+</body>
+</html>
