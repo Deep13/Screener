@@ -430,33 +430,43 @@ async function ensureAngelSession() {
 
 // ------------------------------------------------------------
 // Market Quote (bulk LTP) - Optional confirmation for latest price breakout
+// Angel's /market/v1/quote caps each call at 50 tokens (AB4029). Chunk per-exchange.
 async function getLTPBulk(exchangeTokens) {
   await ensureAngelSession();
 
   const apiKey = process.env.ANGEL_API_KEY;
   if (!angelJwtToken) throw new Error("Missing angelJwtToken (session not ready)");
 
-  const resp = await fetch("https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/quote/", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Authorization: `Bearer ${angelJwtToken}`,
-      "X-PrivateKey": apiKey,
-      "X-UserType": "USER",
-      "X-SourceID": "WEB",
-    },
-    body: JSON.stringify({
-      mode: "LTP",
-      exchangeTokens,
-    }),
-  });
+  const MAX_TOKENS_PER_CALL = 50;
+  const batches = [];
+  for (const [exchange, tokens] of Object.entries(exchangeTokens || {})) {
+    if (!Array.isArray(tokens) || !tokens.length) continue;
+    for (let i = 0; i < tokens.length; i += MAX_TOKENS_PER_CALL) {
+      batches.push({ [exchange]: tokens.slice(i, i + MAX_TOKENS_PER_CALL) });
+    }
+  }
+  if (!batches.length) return [];
 
-  const json = await resp.json();
-  if (!json?.status) throw new Error(`Market quote failed: ${JSON.stringify(json)}`);
-
-  // json.data.fetched: [{exchange, symbolToken, ltp, ...}]
-  return json.data?.fetched || [];
+  const allFetched = [];
+  for (const batch of batches) {
+    const resp = await fetch("https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/quote/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${angelJwtToken}`,
+        "X-PrivateKey": apiKey,
+        "X-UserType": "USER",
+        "X-SourceID": "WEB",
+      },
+      body: JSON.stringify({ mode: "LTP", exchangeTokens: batch }),
+    });
+    const json = await resp.json();
+    if (!json?.status) throw new Error(`Market quote failed: ${JSON.stringify(json)}`);
+    // json.data.fetched: [{exchange, symbolToken, ltp, ...}]
+    allFetched.push(...(json.data?.fetched || []));
+  }
+  return allFetched;
 }
 
 // ------------------------------------------------------------
@@ -849,6 +859,19 @@ app.post("/api/screener", async (req, res) => {
 
     // Flatten sparse → dense, preserving input order.
     for (const r of resultsByIdx) if (r) results.push(r);
+
+    // Round summary — quickly tells if no matches is a data issue vs a pattern issue.
+    let nErr = 0, nFewCandles = 0, nScannedNoHit = 0, nHit = 0;
+    for (const r of results) {
+      if (r.error) nErr++;
+      else if (r.reason === "Not enough candles") nFewCandles++;
+      else if (r.match) nHit++;
+      else nScannedNoHit++;
+    }
+    console.log(
+      `📊 Round summary: ${totalStocks} stocks | ${nErr} errors | ${nFewCandles} too-few-candles | ${nScannedNoHit + nHit} scanned | ${nHit} hits` +
+      ` (preset=${preset} tf=${timeframe} ind=${indicator} side=${candle1Side} mode=${breakoutMode})`
+    );
 
     if (clientDisconnected) return;
 
