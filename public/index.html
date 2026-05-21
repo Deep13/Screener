@@ -1078,6 +1078,25 @@
     }
 
     // ── Render charts + results table (only on history click) ──
+    // Exit the chart/history view and return to the scanning-progress center.
+    function showLiveProgressView() {
+      $("tabs").innerHTML = "";
+      $("tab-panels").innerHTML = "";
+      document.querySelector("#table tbody").innerHTML = "";
+      $("resultsWrap").style.display = "none";
+      document.querySelectorAll("#historyTable tbody tr").forEach((r) => r.classList.remove("active-row"));
+      if (scanning) {
+        showScanningCenter(`Round ${scanRound + 1}`, "Scan in progress…", true);
+      } else {
+        $("tab-panels").innerHTML = `
+          <div class="center-msg" id="centerMsg">
+            <div class="icon">&#9680;</div>
+            <div>Run the screener to find 3-candle breakout patterns</div>
+            <div style="font-size:13px;">~130 stocks scanned per round</div>
+          </div>`;
+      }
+    }
+
     function renderChartTable(rows) {
       lastRows = rows;
       const tbody = document.querySelector("#table tbody");
@@ -1087,6 +1106,15 @@
 
       // Remove center msg when showing charts
       $("centerMsg")?.remove();
+
+      // "Back to live" tab — first thing in the tab bar.
+      const backBtn = document.createElement("button");
+      backBtn.className = "tab-btn tab-btn-back";
+      backBtn.textContent = "← Live";
+      backBtn.title = "Return to scanning progress view";
+      backBtn.style.color = "var(--accent)";
+      backBtn.addEventListener("click", showLiveProgressView);
+      $("tabs").appendChild(backBtn);
 
       const plotlyBase = getPlotlyLayout();
       const cc = getCandleColors();
@@ -1272,7 +1300,7 @@
         fsBtn.addEventListener("click", () => openFullscreen(chartId, data, layout));
       }
 
-      const firstTab = document.querySelector(".tab-btn");
+      const firstTab = document.querySelector(".tab-btn:not(.tab-btn-back)");
       if (firstTab) firstTab.click();
 
       $("resultsWrap").style.display = rows.length ? "" : "none";

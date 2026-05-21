@@ -340,10 +340,10 @@ function getRangeFromPreset(preset) {
 // ------------------------------------------------------------
 // Resolve symboltoken (scrip master)
 // NOTE: This is large JSON. For production, cache it for 1 day.
-let scripMasterCache = null;          // raw array (kept for callers that need rows)
-let scripMasterIndex = null;          // Map<"EXCH:SYM", row> for O(1) lookup
+let scripMasterCache = null; // raw array (kept for callers that need rows)
+let scripMasterIndex = null; // Map<"EXCH:SYM", row> for O(1) lookup
 let scripMasterFetchedAt = 0;
-const tokenCache = new Map();         // Map<"EXCH:SYM", tokenString> — survives across scans
+const tokenCache = new Map(); // Map<"EXCH:SYM", tokenString> — survives across scans
 
 async function loadScripMasterCached() {
   try {
@@ -398,6 +398,13 @@ let lastSessionAt = 0;
 
 let angelJwtToken = null;
 let angelFeedToken = null;
+
+function invalidateAngelSession() {
+  sessionReady = false;
+  lastSessionAt = 0;
+  angelJwtToken = null;
+  angelFeedToken = null;
+}
 
 async function ensureAngelSession() {
   if (sessionReady && Date.now() - lastSessionAt < 10 * 60 * 1000) return;
@@ -498,11 +505,12 @@ async function fetchCandles(exchange, tradingsymbol, interval, preset, timeframe
   };
   console.log("Candle params:", candleParams);
   const candleResp = await smart.getCandleData(candleParams);
-  if (!candleResp || candleResp.status === false) {
+  // Angel uses both `status` (legacy) and `success` (newer) on this endpoint.
+  if (!candleResp || candleResp.status === false || candleResp.success === false) {
     throw new Error(`getCandleData failed: ${JSON.stringify(candleResp)}`);
   }
 
-  const rows = candleResp.data || [];
+  const rows = Array.isArray(candleResp.data) ? candleResp.data : [];
   let candles = rows.map((r) => ({
     time: new Date(r[0]).toISOString(),
     open: Number(r[1]),
@@ -713,8 +721,15 @@ app.post("/api/screener", async (req, res) => {
   const totalStocks = stocks.length;
 
   console.log("⚙️ Params:", {
-    preset, timeframe, interval, indicator, window,
-    candle1Side, breakoutMode, confirmWithLTP, stocks: totalStocks,
+    preset,
+    timeframe,
+    interval,
+    indicator,
+    window,
+    candle1Side,
+    breakoutMode,
+    confirmWithLTP,
+    stocks: totalStocks,
   });
 
   sendEvent("progress", { step: "init", message: `Starting scan for ${totalStocks} stocks...`, current: 0, total: totalStocks });
@@ -725,11 +740,22 @@ app.post("/api/screener", async (req, res) => {
     if (idx >= 0) {
       try {
         const obj = JSON.parse(msg.slice(idx));
-        return { code: obj?.errorcode, apiMessage: obj?.message, raw: obj, msg };
+        // Angel mixes errorcode/errorCode and message/errorMessage across endpoints.
+        return {
+          code: obj?.errorcode ?? obj?.errorCode,
+          apiMessage: obj?.message ?? obj?.errorMessage,
+          raw: obj,
+          msg,
+        };
       } catch (_) {}
     }
     const resp = e?.response?.data;
-    return { code: resp?.errorcode, apiMessage: resp?.message, raw: resp, msg };
+    return {
+      code: resp?.errorcode ?? resp?.errorCode,
+      apiMessage: resp?.message ?? resp?.errorMessage,
+      raw: resp,
+      msg,
+    };
   }
 
   const fetchCandlesWithRetry = async (exchange, tradingsymbol, interval, preset, timeframe, maxTry = 3) => {
@@ -741,8 +767,18 @@ app.post("/api/screener", async (req, res) => {
         lastError = e;
         const info = parseAngelError(e);
         console.warn(`⚠️ Candle fetch failed [${i}/${maxTry}]`, {
-          symbol: tradingsymbol, exchange, code: info.code, message: info.apiMessage || info.msg,
+          symbol: tradingsymbol,
+          exchange,
+          code: info.code,
+          message: info.apiMessage || info.msg,
         });
+        // AG8003 = "Token missing" — session is stale even though we think it's valid.
+        // Invalidate it so the next attempt re-logs in. Worth one retry.
+        if (info.code === "AG8003") {
+          console.warn("🔄 Token missing — forcing session refresh");
+          invalidateAngelSession();
+          continue;
+        }
         if (info.code !== "AB1004") break;
         const wait = 600 * Math.pow(2, i - 1);
         await new Promise((r) => setTimeout(r, wait));
@@ -796,7 +832,10 @@ app.post("/api/screener", async (req, res) => {
         const s = stocks[myIdx];
         const exchange = String(s.exchange || "NSE").toUpperCase();
         const tradingsymbol = String(s.tradingsymbol || "").toUpperCase();
-        if (!tradingsymbol) { completed++; continue; }
+        if (!tradingsymbol) {
+          completed++;
+          continue;
+        }
 
         sendEvent("progress", {
           step: "fetch",
@@ -861,7 +900,10 @@ app.post("/api/screener", async (req, res) => {
     for (const r of resultsByIdx) if (r) results.push(r);
 
     // Round summary — quickly tells if no matches is a data issue vs a pattern issue.
-    let nErr = 0, nFewCandles = 0, nScannedNoHit = 0, nHit = 0;
+    let nErr = 0,
+      nFewCandles = 0,
+      nScannedNoHit = 0,
+      nHit = 0;
     for (const r of results) {
       if (r.error) nErr++;
       else if (r.reason === "Not enough candles") nFewCandles++;
@@ -870,7 +912,7 @@ app.post("/api/screener", async (req, res) => {
     }
     console.log(
       `📊 Round summary: ${totalStocks} stocks | ${nErr} errors | ${nFewCandles} too-few-candles | ${nScannedNoHit + nHit} scanned | ${nHit} hits` +
-      ` (preset=${preset} tf=${timeframe} ind=${indicator} side=${candle1Side} mode=${breakoutMode})`
+        ` (preset=${preset} tf=${timeframe} ind=${indicator} side=${candle1Side} mode=${breakoutMode})`,
     );
 
     if (clientDisconnected) return;
@@ -913,9 +955,13 @@ app.post("/api/screener", async (req, res) => {
         ts: new Date().toISOString(),
         params: scanParams,
         results: matched.map((r) => ({
-          exchange: r.exchange, tradingsymbol: r.tradingsymbol, symboltoken: r.symboltoken,
-          ltp: r.ltp ?? null, liveBreakAboveCandle2High: r.liveBreakAboveCandle2High ?? null,
-          hits: r.hits ?? [], candles: r.candles?.slice(-300) ?? [],
+          exchange: r.exchange,
+          tradingsymbol: r.tradingsymbol,
+          symboltoken: r.symboltoken,
+          ltp: r.ltp ?? null,
+          liveBreakAboveCandle2High: r.liveBreakAboveCandle2High ?? null,
+          hits: r.hits ?? [],
+          candles: r.candles?.slice(-300) ?? [],
         })),
       });
     }
@@ -991,7 +1037,9 @@ function watchlistKey(exchange, tradingsymbol) {
 // ------------------------------------------------------------
 // Search: fuzzy match scrip master by symbol or name (equities only)
 app.get("/api/search", async (req, res) => {
-  const q = String(req.query.q || "").trim().toUpperCase();
+  const q = String(req.query.q || "")
+    .trim()
+    .toUpperCase();
   if (!q) return res.json({ ok: true, results: [] });
   try {
     const data = await loadScripMasterCached();
