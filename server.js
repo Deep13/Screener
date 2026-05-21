@@ -308,12 +308,15 @@ function pad(n) {
   return String(n).padStart(2, "0");
 }
 
-// SmartAPI commonly expects "YYYY-MM-DD HH:mm"
+// Angel's getCandleData expects "YYYY-MM-DD HH:mm" in IST.
+// Format in IST regardless of server timezone (Vercel runs UTC, local dev usually IST).
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 function fmtDateTime(d) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const ist = new Date(d.getTime() + IST_OFFSET_MS);
+  return `${ist.getUTCFullYear()}-${pad(ist.getUTCMonth() + 1)}-${pad(ist.getUTCDate())} ${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}`;
 }
 
-// timeframe preset: today / 1h / 2h / 4h / 2d
+// timeframe preset: today / 1h / 2h / 4h / 2d / 1w / 1mo / 3mo / 6mo / 1y
 function getRangeFromPreset(preset) {
   const now = new Date();
   const end = now;
@@ -331,10 +334,15 @@ function getRangeFromPreset(preset) {
   if (p === "6mo") return { from: new Date(now.getTime() - 180 * DAY), to: end };
   if (p === "1y") return { from: new Date(now.getTime() - 365 * DAY), to: end };
 
-  // today (approx NSE cash hours start at 09:15 IST; you can tune this)
-  const start = new Date(now);
-  start.setHours(9, 15, 0, 0);
-  return { from: start, to: end };
+  // today: 09:15 IST of the current IST trading day (TZ-independent).
+  const istShifted = new Date(now.getTime() + IST_OFFSET_MS);
+  const startMs = Date.UTC(
+    istShifted.getUTCFullYear(),
+    istShifted.getUTCMonth(),
+    istShifted.getUTCDate(),
+    3, 45, 0, 0 // 09:15 IST = 03:45 UTC
+  );
+  return { from: new Date(startMs), to: end };
 }
 
 // ------------------------------------------------------------
