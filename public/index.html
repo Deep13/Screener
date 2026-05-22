@@ -513,6 +513,26 @@
 
     .scanning-pulse { animation: pulse 1.5s ease-in-out infinite; }
 
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .history-loader {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex: 1;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .history-loader .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
     /* ── Progress bar ────────────────────────────── */
     .progress-wrap {
       height: 3px;
@@ -1078,6 +1098,17 @@
     }
 
     // ── Render charts + results table (only on history click) ──
+    function showHistoryLoader() {
+      $("tabs").innerHTML = "";
+      $("tab-panels").innerHTML = `
+        <div class="history-loader">
+          <div class="spinner"></div>
+          <div>Loading scan results…</div>
+        </div>`;
+      $("resultsWrap").style.display = "none";
+      document.querySelector("#table tbody").innerHTML = "";
+    }
+
     // Exit the chart/history view and return to the scanning-progress center.
     function showLiveProgressView() {
       $("tabs").innerHTML = "";
@@ -1354,9 +1385,14 @@
             renderFromHistoryItem(h);
             return;
           }
-          const r = await fetch("/api/history/" + h.id);
-          const j = await r.json();
-          if (j.ok) renderFromHistoryItem(j.item);
+          showHistoryLoader();
+          try {
+            const r = await fetch("/api/history/" + h.id);
+            const j = await r.json();
+            if (j.ok) renderFromHistoryItem(j.item);
+          } catch (e) {
+            $("tab-panels").innerHTML = `<div class="center-msg"><div class="icon">⚠</div><div>Failed to load: ${e.message || e}</div></div>`;
+          }
         });
 
         tbody.appendChild(tr);

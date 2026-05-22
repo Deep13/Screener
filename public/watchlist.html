@@ -260,6 +260,26 @@
       color: var(--text-muted);
       font-size: 13px;
     }
+    .wl-loading-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      color: var(--text-muted);
+      font-size: 13px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .wl-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: wl-spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes wl-spin { to { transform: rotate(360deg); } }
     .wl-item {
       padding: 10px 14px;
       border-bottom: 1px solid var(--border);
@@ -679,11 +699,33 @@
           const exchange = row.dataset.exchange;
           const tradingsymbol = row.dataset.tradingsymbol;
           const name = row.dataset.name;
-          await addToWatchlist({ exchange, tradingsymbol, name });
           $("search").value = "";
           hideSearch();
+          showWatchlistAddLoader(tradingsymbol);
+          try {
+            await addToWatchlist({ exchange, tradingsymbol, name });
+          } finally {
+            // addToWatchlist re-renders the list, so the loader row is removed naturally.
+            // Guard against the error path leaving a stale row.
+            document.getElementById("wlAddLoader")?.remove();
+          }
         });
       });
+    }
+
+    function showWatchlistAddLoader(symbol) {
+      const list = $("wlList");
+      // Drop the empty-state placeholder if it's there.
+      list.querySelector(".wl-empty")?.remove();
+      // Reuse if already present.
+      let row = document.getElementById("wlAddLoader");
+      if (!row) {
+        row = document.createElement("div");
+        row.id = "wlAddLoader";
+        row.className = "wl-loading-row";
+        list.appendChild(row);
+      }
+      row.innerHTML = `<div class="wl-spinner"></div><div>Adding ${symbol}…</div>`;
     }
 
     // ── Watchlist CRUD ──
