@@ -39,8 +39,16 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
-const RESULTS_FILE = path.join(__dirname, "results_history_new.json");
-const WATCHLIST_FILE = path.join(__dirname, "watchlist.json");
+// DATA_DIR lets you point persistent files at a location *outside* the deploy
+// directory — important on hosts like Hostinger/Vercel where each deploy
+// wipes the app dir. Falls back to __dirname for local dev.
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : __dirname;
+// Best-effort ensure the directory exists; ignore EEXIST.
+require("fs").mkdirSync(DATA_DIR, { recursive: true });
+const RESULTS_FILE = path.join(DATA_DIR, "results_history_new.json");
+const WATCHLIST_FILE = path.join(DATA_DIR, "watchlist.json");
 const MAX_HISTORY = 200;
 // ------------------------------------------------------------
 // Default watchlist (~130 large / midcap stocks).
