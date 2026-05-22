@@ -45,8 +45,15 @@ app.use(express.json());
 const DATA_DIR = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)
   : __dirname;
-// Best-effort ensure the directory exists; ignore EEXIST.
-require("fs").mkdirSync(DATA_DIR, { recursive: true });
+// Only attempt to create the directory when DATA_DIR is explicitly set;
+// __dirname is guaranteed to exist. Never let this crash the process at boot.
+if (process.env.DATA_DIR) {
+  try {
+    require("fs").mkdirSync(DATA_DIR, { recursive: true });
+  } catch (e) {
+    console.warn(`⚠️ Could not create DATA_DIR (${DATA_DIR}): ${e.message}`);
+  }
+}
 const RESULTS_FILE = path.join(DATA_DIR, "results_history_new.json");
 const WATCHLIST_FILE = path.join(DATA_DIR, "watchlist.json");
 const MAX_HISTORY = 200;
