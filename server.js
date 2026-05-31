@@ -682,34 +682,55 @@ app.get("/api/candles", async (req, res) => {
   const indicator = (req.query.indicator || "VWAP").toUpperCase();
   const window = Math.max(2, Math.min(200, parseInt(req.query.window || "20", 10)));
   const stdDev = Math.max(0.1, Number(req.query.stdDev || 2));
-  const preset = req.query.preset || "today";
+  const requestedPreset = req.query.preset || "today";
 
   const exchange = (req.query.exchange || "NSE").toUpperCase();
   const tradingsymbol = (req.query.tradingsymbol || "RELIANCE-EQ").toUpperCase();
 
-  try {
-    const interval = mapInterval(timeframe);
-    const { candles } = await fetchCandles(exchange, tradingsymbol, interval, preset, timeframe);
-    const withIndicator = addIndicator(candles, indicator, window, stdDev);
+  // Cascade: try the requested preset; if it returns zero candles (weekend,
+  // holiday, intraday range outside market hours), widen until data appears.
+  const presetCascade = [requestedPreset];
+  for (const p of ["1w", "1mo", "3mo"]) {
+    if (!presetCascade.includes(p)) presetCascade.push(p);
+  }
 
-    res.json({
+  const interval = mapInterval(timeframe);
+  let candles = [];
+  let usedPreset = requestedPreset;
+  let lastError = null;
+
+  for (const preset of presetCascade) {
+    try {
+      const result = await fetchCandles(exchange, tradingsymbol, interval, preset, timeframe);
+      if (result.candles && result.candles.length) {
+        candles = result.candles;
+        usedPreset = preset;
+        break;
+      }
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (candles.length) {
+    const withIndicator = addIndicator(candles, indicator, window, stdDev);
+    return res.json({
       ok: true,
       source: "angelone",
-      params: { exchange, tradingsymbol, preset, timeframe, interval, indicator, window, stdDev },
-      candles: withIndicator,
-    });
-  } catch (e) {
-    const dummy = generateDummyData(600);
-    const withIndicator = addIndicator(dummy, indicator, window, stdDev);
-
-    res.json({
-      ok: true,
-      source: "dummy_fallback",
-      error: String(e.message || e),
-      params: { preset, timeframe, indicator, window, stdDev },
+      params: { exchange, tradingsymbol, preset: usedPreset, requestedPreset, timeframe, interval, indicator, window, stdDev },
       candles: withIndicator,
     });
   }
+
+  const dummy = generateDummyData(600);
+  const withIndicator = addIndicator(dummy, indicator, window, stdDev);
+  res.json({
+    ok: true,
+    source: "dummy_fallback",
+    error: lastError ? String(lastError.message || lastError) : "No candles returned for any preset",
+    params: { preset: requestedPreset, requestedPreset, timeframe, indicator, window, stdDev },
+    candles: withIndicator,
+  });
 });
 
 // ------------------------------------------------------------

@@ -986,6 +986,8 @@
         layout.title = { text: "⚠ Dummy data (Angel session unavailable)", font: { color: getCssVar("--amber"), size: 12 } };
       } else if (source === "dummy_local") {
         layout.title = { text: "🧪 Simulated test stock — set upper/lower limits to fire the alarm", font: { color: getCssVar("--amber"), size: 12 } };
+      } else if (params?.requestedPreset && params?.preset && params.preset !== params.requestedPreset) {
+        layout.title = { text: `ℹ No data for "${params.requestedPreset}" — showing "${params.preset}" instead`, font: { color: getCssVar("--amber"), size: 12 } };
       }
 
       $("chart").style.display = "block";
