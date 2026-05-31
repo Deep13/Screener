@@ -863,7 +863,7 @@ app.post("/api/screener", async (req, res) => {
         sendEvent("progress", {
           step: "fetch",
           message: `Fetching ${tradingsymbol}`,
-          current: completed + 1,
+          current: completed,
           total: totalStocks,
           matches: matchesSoFar,
         });
@@ -883,7 +883,7 @@ app.post("/api/screener", async (req, res) => {
           sendEvent("progress", {
             step: "calculate",
             message: `Analyzing ${tradingsymbol}`,
-            current: completed + 1,
+            current: completed,
             total: totalStocks,
             matches: matchesSoFar,
           });
@@ -900,7 +900,7 @@ app.post("/api/screener", async (req, res) => {
             sendEvent("match", {
               message: `Pattern found in ${tradingsymbol}`,
               symbol: tradingsymbol,
-              current: completed + 1,
+              current: completed,
               total: totalStocks,
               matches: matchesSoFar,
             });

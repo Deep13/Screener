@@ -409,13 +409,13 @@
     .sidebar-content::-webkit-scrollbar { width: 4px; }
     .sidebar-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-    #historyTable {
+    #historyTable, #stockListTable {
       width: 100%;
       border-collapse: collapse;
       font-size: 13px;
     }
 
-    #historyTable th {
+    #historyTable th, #stockListTable th {
       background: var(--surface2);
       color: var(--text-muted);
       padding: 6px 8px;
@@ -427,15 +427,17 @@
       top: 0;
     }
 
-    #historyTable td {
+    #historyTable td, #stockListTable td {
       padding: 6px 8px;
       border-bottom: 1px solid var(--border);
       color: var(--text);
       cursor: pointer;
     }
 
-    #historyTable tbody tr:hover td { background: var(--surface2); }
-    #historyTable tbody tr.active-row td { background: var(--accent); color: #fff; }
+    #historyTable tbody tr:hover td,
+    #stockListTable tbody tr:hover td { background: var(--surface2); }
+    #historyTable tbody tr.active-row td,
+    #stockListTable tbody tr.active-row td { background: var(--accent); color: #fff; }
 
     /* ── Fullscreen overlay ──────────────────────── */
     #fullscreen-overlay {
@@ -670,7 +672,6 @@
   <div class="main">
     <!-- Chart area -->
     <div class="chart-area">
-      <div id="tabs" class="tabs"></div>
       <div id="tab-panels" style="flex:1;display:flex;flex-direction:column;min-height:0;">
         <!-- Center message area (idle / scanning / chart) -->
         <div class="center-msg" id="centerMsg">
@@ -701,7 +702,8 @@
     <!-- Right sidebar: history -->
     <div class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <span>History</span>
+        <button class="sidebar-btn" id="backToHistory" title="Back to history" style="display:none">&#8592;</button>
+        <span id="sidebarTitle">History</span>
         <div style="display:flex;gap:4px;align-items:center">
           <button class="sidebar-btn" id="refreshHistory" title="Refresh (clear ephemeral)">&#8635;</button>
           <button class="sidebar-toggle" id="sidebarToggle" title="Toggle sidebar">&#9776;</button>
@@ -720,6 +722,16 @@
           </thead>
           <tbody></tbody>
         </table>
+        <table id="stockListTable" style="display:none">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>LTP</th>
+              <th>Break</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -730,6 +742,8 @@
     let serverIndicator = "SMA";
     let lastRows = [];
     let isDark = true;
+    let currentStock = null;   // stock currently shown in the center chart
+    let viewingChart = false;  // true while a history scan's charts are being viewed
 
     // ── Scanning state ──
     let scanning = false;
@@ -754,7 +768,7 @@
       document.body.classList.toggle("light", !isDark);
       $("themeToggle").innerHTML = isDark ? "&#9789;" : "&#9788;";
       localStorage.setItem("theme", isDark ? "dark" : "light");
-      if (lastRows.length) renderChartTable(lastRows);
+      if (currentStock) renderStockChart(currentStock);
     });
 
     if (localStorage.getItem("theme") === "light") {
@@ -800,7 +814,7 @@
     $("sidebarToggle").addEventListener("click", () => {
       $("sidebar").classList.toggle("collapsed");
       setTimeout(() => {
-        const activeChart = document.querySelector(".tab-panel.active .chart-box");
+        const activeChart = document.querySelector(".chart-box");
         if (activeChart) Plotly.Plots.resize(activeChart);
       }, 250);
     });
@@ -892,7 +906,9 @@
       $("actionBtn").className = "action-btn stop";
 
       // Clear charts — they only appear on history click now
-      $("tabs").innerHTML = "";
+      viewingChart = false;
+      currentStock = null;
+      showHistoryView();
       $("tab-panels").innerHTML = "";
       $("resultsWrap").style.display = "none";
       document.querySelector("#table tbody").innerHTML = "";
@@ -913,8 +929,7 @@
 
     function showScanningCenter(message, detail, pulsing) {
       // Only update center if no chart is being viewed
-      const hasActiveChart = document.querySelector(".tab-panel.active");
-      if (hasActiveChart) return;
+      if (viewingChart) return;
 
       const cm = $("centerMsg") || document.createElement("div");
       cm.id = "centerMsg";
@@ -937,6 +952,10 @@
       return new Promise((resolve, reject) => {
         abortController = new AbortController();
         const signal = abortController.signal;
+
+        // Clamp progress to never go backward within a round — 3 concurrent
+        // workers can emit out-of-order intermediate values.
+        let lastCurrent = 0;
 
         fetch("/api/screener", {
           method: "POST",
@@ -962,7 +981,9 @@
               try {
                 const evt = JSON.parse(line.slice(6));
                 if (evt.type === "progress") {
-                  const pct = evt.total ? Math.round((evt.current / evt.total) * 100) : 0;
+                  lastCurrent = Math.max(lastCurrent, evt.current || 0);
+                  const cur = lastCurrent;
+                  const pct = evt.total ? Math.round((cur / evt.total) * 100) : 0;
                   $("progress").className = "progress-bar";
                   $("progress").style.width = pct + "%";
 
@@ -974,17 +995,19 @@
                     saving: "Saving results to history...",
                   }[evt.step] || evt.message;
 
-                  $("status").innerHTML = `<span style="color:var(--amber)">Round ${scanRound + 1}</span> | ${stepLabel} <span class="match-count">(${evt.current || 0}/${evt.total || 0})</span> | Matches: <span class="match-count">${evt.matches || 0}</span>`;
+                  $("status").innerHTML = `<span style="color:var(--amber)">Round ${scanRound + 1}</span> | ${stepLabel} <span class="match-count">(${cur}/${evt.total || 0})</span> | Matches: <span class="match-count">${evt.matches || 0}</span>`;
 
                   showScanningCenter(
-                    `Round ${scanRound + 1} — ${evt.current || 0}/${evt.total || 0}`,
+                    `Round ${scanRound + 1} — ${cur}/${evt.total || 0}`,
                     `${stepLabel}<br>Matches so far: <strong>${evt.matches || 0}</strong>`,
                     true
                   );
                 } else if (evt.type === "match") {
+                  lastCurrent = Math.max(lastCurrent, evt.current || 0);
+                  const cur = lastCurrent;
                   // Flash match notification
                   showScanningCenter(
-                    `Round ${scanRound + 1} — ${evt.current}/${evt.total}`,
+                    `Round ${scanRound + 1} — ${cur}/${evt.total}`,
                     `Pattern found in <strong style="color:var(--green)">${evt.symbol}</strong><br>Total matches: <strong>${evt.matches}</strong>`,
                     true
                   );
@@ -1099,7 +1122,6 @@
 
     // ── Render charts + results table (only on history click) ──
     function showHistoryLoader() {
-      $("tabs").innerHTML = "";
       $("tab-panels").innerHTML = `
         <div class="history-loader">
           <div class="spinner"></div>
@@ -1109,13 +1131,19 @@
       document.querySelector("#table tbody").innerHTML = "";
     }
 
-    // Exit the chart/history view and return to the scanning-progress center.
-    function showLiveProgressView() {
-      $("tabs").innerHTML = "";
-      $("tab-panels").innerHTML = "";
-      document.querySelector("#table tbody").innerHTML = "";
-      $("resultsWrap").style.display = "none";
-      document.querySelectorAll("#historyTable tbody tr").forEach((r) => r.classList.remove("active-row"));
+    // Swap the sidebar back to the history list.
+    function showHistoryView() {
+      viewingChart = false;
+      currentStock = null;
+      $("stockListTable").style.display = "none";
+      $("historyTable").style.display = "";
+      $("backToHistory").style.display = "none";
+      $("sidebarTitle").textContent = "History";
+    }
+
+    $("backToHistory").addEventListener("click", () => {
+      showHistoryView();
+      // Restore the live/idle center now that we've left the chart view.
       if (scanning) {
         showScanningCenter(`Round ${scanRound + 1}`, "Scan in progress…", true);
       } else {
@@ -1125,38 +1153,56 @@
             <div>Run the screener to find 3-candle breakout patterns</div>
             <div style="font-size:13px;">~130 stocks scanned per round</div>
           </div>`;
+        $("resultsWrap").style.display = "none";
+        document.querySelector("#table tbody").innerHTML = "";
+      }
+    });
+
+    // Swap the sidebar to show the matched-stock list for a scan.
+    function showStockList(item) {
+      const rows = item.results || [];
+      $("historyTable").style.display = "none";
+      $("stockListTable").style.display = "";
+      $("backToHistory").style.display = "";
+      $("sidebarTitle").textContent = "Stocks";
+
+      const tbody = $("stockListTable").querySelector("tbody");
+      tbody.innerHTML = "";
+
+      rows.forEach((r) => {
+        const tr = document.createElement("tr");
+        const live = r.liveBreakAboveCandle2High;
+        tr.innerHTML = `
+          <td><strong>${r.tradingsymbol.replace("-EQ", "")}</strong></td>
+          <td>${typeof r.ltp === "number" ? r.ltp.toFixed(2) : ""}</td>
+          <td class="${live ? "ok" : ""}">${live === true ? "YES" : live === false ? "NO" : ""}</td>
+        `;
+        tr.addEventListener("click", () => {
+          tbody.querySelectorAll("tr").forEach((x) => x.classList.remove("active-row"));
+          tr.classList.add("active-row");
+          renderStockChart(r);
+        });
+        tbody.appendChild(tr);
+      });
+
+      // Auto-select the first matched stock.
+      if (rows.length) {
+        tbody.firstChild.classList.add("active-row");
+        renderStockChart(rows[0]);
       }
     }
 
-    function renderChartTable(rows) {
+    // Fill the bottom results table with every matched stock for the scan.
+    function renderResultsTable(rows) {
       lastRows = rows;
       const tbody = document.querySelector("#table tbody");
       tbody.innerHTML = "";
-      $("tabs").innerHTML = "";
-      $("tab-panels").innerHTML = "";
-
-      // Remove center msg when showing charts
-      $("centerMsg")?.remove();
-
-      // "Back to live" tab — first thing in the tab bar.
-      const backBtn = document.createElement("button");
-      backBtn.className = "tab-btn tab-btn-back";
-      backBtn.textContent = "← Live";
-      backBtn.title = "Return to scanning progress view";
-      backBtn.style.color = "var(--accent)";
-      backBtn.addEventListener("click", showLiveProgressView);
-      $("tabs").appendChild(backBtn);
-
-      const plotlyBase = getPlotlyLayout();
-      const cc = getCandleColors();
-
       for (const r of rows) {
         const tr = document.createElement("tr");
         const firstHit = (r.hits || (r.hit ? [r.hit] : []))[0];
         const c2h = firstHit?.candle2High;
         const ltp = r.ltp ?? "";
         const live = r.liveBreakAboveCandle2High;
-
         tr.innerHTML = `
           <td><strong>${r.tradingsymbol}</strong></td>
           <td>${r.exchange}</td>
@@ -1166,9 +1212,25 @@
           <td class="${live ? "ok" : ""}">${live === true ? "YES" : live === false ? "NO" : ""}</td>
         `;
         tbody.appendChild(tr);
+      }
+      $("resultsWrap").style.display = rows.length ? "" : "none";
+    }
 
-        const candles = r.candles;
-        if (!candles || !candles.length) continue;
+    // Render a single stock's chart + candle-detail table in the center.
+    function renderStockChart(r) {
+      currentStock = r;
+      viewingChart = true;
+      $("centerMsg")?.remove();
+      $("tab-panels").innerHTML = "";
+
+      const plotlyBase = getPlotlyLayout();
+      const cc = getCandleColors();
+
+      const candles = r.candles;
+      if (!candles || !candles.length) {
+        $("tab-panels").innerHTML = `<div class="center-msg"><div class="icon">&#9675;</div><div>No chart data for ${r.tradingsymbol}</div></div>`;
+        return;
+      }
 
         const dates = candles.map(c => parseIST(c.time));
         const opens = candles.map(c => c.open);
@@ -1184,12 +1246,8 @@
         const bollingerOffset = bollingerWindow - 1;
         const bollingerDates = dates.slice(bollingerOffset);
 
-        const tabBtn = document.createElement("button");
-        tabBtn.className = "tab-btn";
-        tabBtn.textContent = r.tradingsymbol.replace("-EQ", "");
-
         const panel = document.createElement("div");
-        panel.className = "tab-panel";
+        panel.className = "tab-panel active";
 
         const panelHeader = document.createElement("div");
         panelHeader.className = "panel-header";
@@ -1235,16 +1293,7 @@
         candleWrap.appendChild(candleTable);
         panel.appendChild(candleWrap);
 
-        $("tabs").appendChild(tabBtn);
         $("tab-panels").appendChild(panel);
-
-        tabBtn.addEventListener("click", () => {
-          document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-          document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-          tabBtn.classList.add("active");
-          panel.classList.add("active");
-          Plotly.Plots.resize(document.getElementById(chartId));
-        });
 
         const isBollinger = isBollingerIndicator(chosenIndicator);
         const indLabel = chosenIndicator.replace(/_/g, " ");
@@ -1329,12 +1378,6 @@
         Plotly.newPlot(chartId, data, layout, { responsive: true });
 
         fsBtn.addEventListener("click", () => openFullscreen(chartId, data, layout));
-      }
-
-      const firstTab = document.querySelector(".tab-btn:not(.tab-btn-back)");
-      if (firstTab) firstTab.click();
-
-      $("resultsWrap").style.display = rows.length ? "" : "none";
     }
 
     // ── History ──
@@ -1420,10 +1463,11 @@
       $("status").innerHTML = `History: ${formatUTC(item.ts)} | Matches: <span class="match-count">${results.length}</span>`;
 
       if (results.length) {
-        renderChartTable(results);
+        renderResultsTable(results);
+        showStockList(item);  // swaps the sidebar to the stock list and shows the first chart
       } else {
-        // No matches — show message
-        $("tabs").innerHTML = "";
+        // No matches — keep the history list, show a message in the center.
+        showHistoryView();
         $("tab-panels").innerHTML = `<div class="center-msg" id="centerMsg"><div class="icon">&#9675;</div><div>No matches in this scan</div></div>`;
         $("resultsWrap").style.display = "none";
         document.querySelector("#table tbody").innerHTML = "";
