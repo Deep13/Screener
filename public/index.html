@@ -653,6 +653,29 @@
         animation: spin 0.8s linear infinite;
       }
 
+      .history-row-loader {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 20px 8px;
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+      .history-row-loader .mini-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid var(--border);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      #historyTable tbody tr.history-loading-row td {
+        border-bottom: none;
+        cursor: default;
+        background: transparent !important;
+      }
+
       /* ── Progress bar ────────────────────────────── */
       .progress-wrap {
         height: 3px;
@@ -869,7 +892,7 @@
     </div>
 
     <script>
-      console.log("ver 0.0.1");
+      console.log("ver 0.0.2");
       const $ = (id) => document.getElementById(id);
 
       let serverIndicator = "SMA";
@@ -1294,7 +1317,11 @@
 
       $("backToHistory").addEventListener("click", () => {
         showHistoryView();
-        // Restore the live/idle center now that we've left the chart view.
+        // Clear the chart panel before restoring the live/idle center —
+        // otherwise the prior chart sits stacked above the scan center.
+        $("tab-panels").innerHTML = "";
+        $("resultsWrap").style.display = "none";
+        document.querySelector("#table tbody").innerHTML = "";
         if (scanning) {
           showScanningCenter(`Round ${scanRound + 1}`, "Scan in progress…", true);
         } else {
@@ -1304,8 +1331,6 @@
             <div>Run the screener to find 3-candle breakout patterns</div>
             <div style="font-size:13px;">~130 stocks scanned per round</div>
           </div>`;
-          $("resultsWrap").style.display = "none";
-          document.querySelector("#table tbody").innerHTML = "";
         }
       });
 
@@ -1559,15 +1584,34 @@
 
       // ── History ──
       async function fetchHistoryAndRender() {
-        const resp = await fetch("/api/history");
-        const json = await resp.json();
-        if (!json.ok) return;
+        const tbody = document.querySelector("#historyTable tbody");
+        tbody.innerHTML = `
+          <tr class="history-loading-row">
+            <td colspan="5">
+              <div class="history-row-loader">
+                <div class="mini-spinner"></div>
+                <span>Loading history…</span>
+              </div>
+            </td>
+          </tr>`;
+
+        let json;
+        try {
+          const resp = await fetch("/api/history");
+          json = await resp.json();
+        } catch (e) {
+          tbody.innerHTML = `<tr class="history-loading-row"><td colspan="5" style="text-align:center;padding:16px;color:var(--red)">Failed to load history</td></tr>`;
+          return;
+        }
+        if (!json.ok) {
+          tbody.innerHTML = `<tr class="history-loading-row"><td colspan="5" style="text-align:center;padding:16px;color:var(--red)">Failed to load history</td></tr>`;
+          return;
+        }
 
         const serverHistory = json.history || [];
         // Merge ephemeral (0-match) entries with server history, sorted newest first
         const allHistory = [...ephemeralHistory, ...serverHistory].sort((a, b) => new Date(b.ts) - new Date(a.ts));
 
-        const tbody = document.querySelector("#historyTable tbody");
         tbody.innerHTML = "";
 
         allHistory.forEach((h) => {

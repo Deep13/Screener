@@ -42,9 +42,7 @@ app.use(express.json());
 // DATA_DIR lets you point persistent files at a location *outside* the deploy
 // directory — important on hosts like Hostinger/Vercel where each deploy
 // wipes the app dir. Falls back to __dirname for local dev.
-const DATA_DIR = process.env.DATA_DIR
-  ? path.resolve(process.env.DATA_DIR)
-  : __dirname;
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
 // Only attempt to create the directory when DATA_DIR is explicitly set;
 // __dirname is guaranteed to exist. Never let this crash the process at boot.
 if (process.env.DATA_DIR) {
@@ -355,7 +353,10 @@ function getRangeFromPreset(preset) {
     istShifted.getUTCFullYear(),
     istShifted.getUTCMonth(),
     istShifted.getUTCDate(),
-    3, 45, 0, 0 // 09:15 IST = 03:45 UTC
+    3,
+    45,
+    0,
+    0, // 09:15 IST = 03:45 UTC
   );
   return { from: new Date(startMs), to: end };
 }
@@ -680,6 +681,7 @@ app.get("/api/candles", async (req, res) => {
   const timeframe = req.query.timeframe || "5m";
   const indicator = (req.query.indicator || "VWAP").toUpperCase();
   const window = Math.max(2, Math.min(200, parseInt(req.query.window || "20", 10)));
+  const stdDev = Math.max(0.1, Number(req.query.stdDev || 2));
   const preset = req.query.preset || "today";
 
   const exchange = (req.query.exchange || "NSE").toUpperCase();
@@ -688,23 +690,23 @@ app.get("/api/candles", async (req, res) => {
   try {
     const interval = mapInterval(timeframe);
     const { candles } = await fetchCandles(exchange, tradingsymbol, interval, preset, timeframe);
-    const withIndicator = addIndicator(candles, indicator, window);
+    const withIndicator = addIndicator(candles, indicator, window, stdDev);
 
     res.json({
       ok: true,
       source: "angelone",
-      params: { exchange, tradingsymbol, preset, timeframe, interval, indicator, window },
+      params: { exchange, tradingsymbol, preset, timeframe, interval, indicator, window, stdDev },
       candles: withIndicator,
     });
   } catch (e) {
     const dummy = generateDummyData(600);
-    const withIndicator = addIndicator(dummy, indicator, window);
+    const withIndicator = addIndicator(dummy, indicator, window, stdDev);
 
     res.json({
       ok: true,
       source: "dummy_fallback",
       error: String(e.message || e),
-      params: { preset, timeframe, indicator, window },
+      params: { preset, timeframe, indicator, window, stdDev },
       candles: withIndicator,
     });
   }
