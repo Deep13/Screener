@@ -832,7 +832,7 @@
           <div class="center-msg" id="centerMsg">
             <div class="icon">&#9680;</div>
             <div>Run the screener to find 3-candle breakout patterns</div>
-            <div style="font-size: 13px">~130 stocks scanned per round</div>
+            <div style="font-size: 13px">~500 stocks scanned per round</div>
           </div>
         </div>
 
@@ -892,7 +892,7 @@
     </div>
 
     <script>
-      console.log("ver 0.0.3");
+      console.log("ver 0.0.4");
       const $ = (id) => document.getElementById(id);
 
       let serverIndicator = "SMA";
@@ -1019,7 +1019,7 @@
       // Angel One getCandleData rate limits
       const RATE_LIMIT = { perSec: 3, perMin: 180, perHour: 5000 };
       // Matches DEFAULT_STOCKS in server.js — keep in sync if that list changes.
-      const STOCKS_PER_ROUND = 119;
+      const STOCKS_PER_ROUND = 500;
 
       function checkApiLimit(preset, timeframe) {
         // 1w/1mo timeframes always aggregate from daily candles server-side, so skip.
@@ -1281,10 +1281,13 @@
           lowerBand = [],
           middleBand = [];
 
-        for (let i = window - 1; i < closes.length; i++) {
-          const slice = closes.slice(i - window + 1, i + 1);
-          const sma = slice.reduce((s, v) => s + v, 0) / window;
-          const variance = slice.reduce((s, v) => s + Math.pow(v - sma, 2), 0) / window;
+        // Use a partial window for the first window-1 candles so the bands
+        // span the full chart (no leading gap before the warm-up completes).
+        for (let i = 0; i < closes.length; i++) {
+          const start = Math.max(0, i - window + 1);
+          const slice = closes.slice(start, i + 1);
+          const sma = slice.reduce((s, v) => s + v, 0) / slice.length;
+          const variance = slice.reduce((s, v) => s + Math.pow(v - sma, 2), 0) / slice.length;
           const sd = Math.sqrt(variance);
           upperBand.push(sma + numDev * sd);
           lowerBand.push(sma - numDev * sd);
@@ -1329,7 +1332,7 @@
           <div class="center-msg" id="centerMsg">
             <div class="icon">&#9680;</div>
             <div>Run the screener to find 3-candle breakout patterns</div>
-            <div style="font-size:13px;">~130 stocks scanned per round</div>
+            <div style="font-size:13px;">~500 stocks scanned per round</div>
           </div>`;
         }
       });
@@ -1419,8 +1422,8 @@
         const bollingerStdDev = parseFloat($("stdDev").value) || 2;
         const { upperBand, lowerBand, middleBand } = calculateBollingerBands(candles, bollingerWindow, bollingerStdDev);
         const chosenIndicator = $("indicator").value;
-        const bollingerOffset = bollingerWindow - 1;
-        const bollingerDates = dates.slice(bollingerOffset);
+        // Bands now span every candle (partial window for the warm-up), so use the full dates array.
+        const bollingerDates = dates;
 
         const panel = document.createElement("div");
         panel.className = "tab-panel active";
