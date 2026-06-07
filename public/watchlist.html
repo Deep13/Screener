@@ -977,8 +977,16 @@
         plot_bgcolor: getCssVar("--plot-bg"),
         font: { color: getCssVar("--plot-font"), size: 11 },
         margin: { l: 50, r: 20, t: 20, b: 40 },
-        xaxis: { gridcolor: getCssVar("--plot-grid"), rangeslider: { visible: false } },
-        yaxis: { gridcolor: getCssVar("--plot-grid"), side: "right" },
+        // Category axis collapses non-trading hours / weekends to no gap.
+        xaxis: {
+          type: "category",
+          gridcolor: getCssVar("--plot-grid"),
+          rangeslider: { visible: false },
+          nticks: 10,
+          tickangle: -45,
+          automargin: true,
+        },
+        yaxis: { gridcolor: getCssVar("--plot-grid"), side: "right", tickformat: ".2f", hoverformat: ".2f" },
         legend: { orientation: "h", y: 1.05, x: 0 },
         showlegend: true,
       };

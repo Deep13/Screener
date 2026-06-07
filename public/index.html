@@ -892,7 +892,7 @@
     </div>
 
     <script>
-      console.log("ver 0.0.4");
+      console.log("ver 0.0.5");
       const $ = (id) => document.getElementById(id);
 
       let serverIndicator = "SMA";
@@ -941,20 +941,29 @@
           plot_bgcolor: s.getPropertyValue("--plot-bg").trim(),
           font: { color: s.getPropertyValue("--plot-font").trim(), size: 13 },
           xaxis: {
-            type: "date",
+            // Category axis collapses non-trading hours / weekends to no gap.
+            type: "category",
             rangeslider: { visible: false },
             gridcolor: s.getPropertyValue("--plot-grid").trim(),
             linecolor: s.getPropertyValue("--plot-grid").trim(),
             tickfont: { color: s.getPropertyValue("--plot-font").trim() },
+            // Cap tick density and rotate so "YYYY-MM-DD HH:MM" labels stay readable.
+            nticks: 10,
+            tickangle: -45,
+            automargin: true,
           },
           yaxis: {
             title: "Price",
             gridcolor: s.getPropertyValue("--plot-grid").trim(),
             linecolor: s.getPropertyValue("--plot-grid").trim(),
             tickfont: { color: s.getPropertyValue("--plot-font").trim() },
+            // Always render with 2 decimal places so closely-spaced ticks don't collide
+            // into duplicates like "192, 192, 191, 191, 190, 190".
+            tickformat: ".2f",
+            hoverformat: ".2f",
           },
           legend: { orientation: "h", y: 1.08, font: { size: 12, color: s.getPropertyValue("--plot-font").trim() } },
-          margin: { t: 36, r: 12, b: 32, l: 52 },
+          margin: { t: 36, r: 12, b: 32, l: 68 },
         };
       }
 
@@ -1412,6 +1421,8 @@
         }
 
         const dates = candles.map((c) => parseIST(c.time));
+        // Category x-axis labels — each candle gets one slot, removing closed-market gaps.
+        const xLabels = candles.map((c) => formatUTC(c.time));
         const opens = candles.map((c) => c.open);
         const highs = candles.map((c) => c.high);
         const lows = candles.map((c) => c.low);
@@ -1422,8 +1433,8 @@
         const bollingerStdDev = parseFloat($("stdDev").value) || 2;
         const { upperBand, lowerBand, middleBand } = calculateBollingerBands(candles, bollingerWindow, bollingerStdDev);
         const chosenIndicator = $("indicator").value;
-        // Bands now span every candle (partial window for the warm-up), so use the full dates array.
-        const bollingerDates = dates;
+        // Bands now span every candle (partial window for the warm-up), so use the full label array.
+        const bollingerDates = xLabels;
 
         const panel = document.createElement("div");
         panel.className = "tab-panel active";
@@ -1483,7 +1494,7 @@
 
         const data = [
           {
-            x: dates,
+            x: xLabels,
             open: opens,
             high: highs,
             low: lows,
@@ -1497,7 +1508,7 @@
 
         if (!isBollinger) {
           data.push({
-            x: dates,
+            x: xLabels,
             y: indicatorValues,
             type: "scatter",
             mode: "lines",
@@ -1556,7 +1567,7 @@
             const mLabel = multiHit ? `${label}-${hi + 1}` : label;
             const mColor = multiHit ? groupColor : defaultColor;
             data.push({
-              x: [dates[idx]],
+              x: [xLabels[idx]],
               y: [candle.high * 1.002],
               type: "scatter",
               mode: "markers+text",
